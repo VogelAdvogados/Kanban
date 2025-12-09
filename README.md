@@ -1,20 +1,95 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Rambo Prev - Sistema de Gestão Jurídica
 
-# Run and deploy your AI Studio app
+O **Rambo Prev** é um sistema completo de gestão para escritórios de advocacia, com foco especializado em Direito Previdenciário. A aplicação utiliza uma metodologia **Kanban** avançada para rastrear o ciclo de vida dos processos, desde a triagem administrativa até a fase judicial e recursal.
 
-This contains everything you need to run your app locally.
+## 🚀 Visão Geral
 
-View your app in AI Studio: https://ai.studio/apps/drive/1xax4w7e52oICJqIzTQm5lVYxDWwdeOHj
+O sistema foi projetado para aumentar a produtividade e a organização do escritório, eliminando planilhas e controles manuais. Ele centraliza cadastro de clientes, controle de prazos, geração de documentos e comunicação via WhatsApp em uma interface única e intuitiva.
 
-## Run Locally
+## ✨ Funcionalidades Principais
 
-**Prerequisites:**  Node.js
+### 1. Gestão Visual (Kanban)
+*   **Múltiplos Fluxos**: Vistas dedicadas para Administrativo, Auxílio-Doença, Recurso Administrativo, Judicial e Mesa de Decisão.
+*   **Drag & Drop Inteligente**: Arraste cartões entre colunas. O sistema detecta o movimento e solicita informações contextuais (ex: ao mover para "Protocolado", pede o número do protocolo e data).
+*   **Zonas de Ação**: Área lateral para ações rápidas como "Judicializar", "Arquivar" ou "Enviar para Recurso".
 
+### 2. Automação e Inteligência
+*   **Previsão de Conclusão**: Algoritmo que estima a data de conclusão baseada no histórico do escritório.
+*   **Detecção de Prazos**: Alertas visuais para prazos fatais e perícias próximas.
+*   **Transições Lógicas**: Regras de negócio embutidas (ex: se um benefício é indeferido, sugere automaticamente o prazo recursal de 30 dias).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 3. Gerador de Documentos Profissional
+*   **Editor Rich Text**: Editor completo com suporte a formatação (negrito, itálico), alinhamento e listas.
+*   **Tabelas e Imagens**: Suporte para inserção e edição de tabelas dinâmicas e upload de imagens (ou inserção via URL).
+*   **Variáveis Inteligentes**: Preenchimento automático de dados (ex: `{NOME_CLIENTE}`, `{CPF}`, `{ENDERECO_COMPLETO}`) com base na ficha do cliente.
+*   **Logo do Escritório**: Inserção automática da logomarca configurada nas configurações.
+*   **Modelos Personalizáveis**: Crie e salve seus próprios modelos de Procuração, Contratos e Declarações.
+
+### 4. Gestão de Clientes e Processos
+*   **Ficha Completa**: Dados pessoais, endereço (com busca de CEP), senhas (Gov.br) e histórico de contatos.
+*   **Linha do Tempo**: Visualização gráfica do progresso do processo (estilo "metrô").
+*   **Anexos e Pendências**: Upload de arquivos e checklist de documentos pendentes.
+*   **Histórico de Auditoria**: Log completo de todas as ações realizadas no processo (quem fez, quando e o quê).
+
+### 5. Ferramentas Integradas
+*   **Integração WhatsApp**: Envio de mensagens pré-formatadas (cobrança de docs, aviso de perícia, felicitações) com um clique.
+*   **Central de Tarefas**: Gestão de pendências da equipe com filtros por prioridade.
+*   **Dashboard (BI)**: Gráficos de carga de trabalho, taxa de êxito, aniversariantes do dia e processos estagnados.
+*   **Agenda/Calendário**: Visualização mensal de prazos, perícias e datas de cessação (DCB).
+
+### 6. Configurações e Segurança
+*   **Gestão de Equipe**: Cadastro de usuários (Advogados, Secretaria, Financeiro) com cores de identificação.
+*   **Dados do Escritório**: Configuração de nome, endereço, OAB e **Upload de Logotipo**.
+*   **Backup e Restauração**: Exportação completa dos dados em JSON (criptografado localmente) ou CSV para Excel. O sistema roda 100% no navegador (LocalStorage) garantindo privacidade e velocidade.
+
+## 🛠️ Tecnologias Utilizadas
+
+*   **Frontend**: React 18, TypeScript.
+*   **Estilização**: Tailwind CSS (Design responsivo e moderno).
+*   **Ícones**: Lucide React.
+*   **Persistência**: LocalStorage (Simulação de banco de dados no navegador).
+*   **Performance**: React.lazy para carregamento sob demanda (Code splitting) e otimizações de renderização.
+
+## 📂 Estrutura do Projeto
+
+```
+/
+├── components/          # Componentes da UI
+│   ├── kanban/          # Colunas e lógica do board
+│   ├── case-modal/      # Modal de detalhes do processo (Ficha, Arquivos, Histórico)
+│   ├── settings/        # Gerenciador de Modelos e Configurações
+│   ├── transitions/     # Formulários de transição de fase
+│   ├── clients/         # Lista e detalhes de clientes
+│   └── ...              # Dashboard, Header, DocumentGenerator, etc.
+├── hooks/               # Custom Hooks (useKanban, useIsMobile)
+├── types.ts             # Definições de Tipos TypeScript
+├── constants.ts         # Configurações estáticas (Cores, Regras, Modelos Padrão)
+├── utils.ts             # Funções auxiliares (Datas, Validação CPF, Exportação)
+├── App.tsx              # Componente Raiz e Roteamento Lógico
+└── index.tsx            # Ponto de entrada
+```
+
+## 🚀 Como Executar
+
+1.  Certifique-se de ter o **Node.js** instalado.
+2.  Instale as dependências:
+    ```bash
+    npm install
+    ```
+3.  Inicie o servidor de desenvolvimento:
+    ```bash
+    npm run dev
+    ```
+4.  O sistema estará acessível em `http://localhost:5173` (ou porta similar).
+
+## 💾 Backup e Dados
+
+O sistema utiliza o armazenamento local do navegador. Para garantir a segurança dos dados:
+1.  Vá em **Configurações > Dados & Backup**.
+2.  Clique em **"Baixar Backup Completo (.JSON)"**.
+3.  Salve o arquivo gerado em um local seguro (nuvem ou HD externo).
+4.  Para restaurar, utilize a opção "Restaurar Dados" na mesma tela.
+
+---
+
+**Desenvolvido para alta performance e usabilidade jurídica.**
