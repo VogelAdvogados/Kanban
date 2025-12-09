@@ -1,6 +1,18 @@
-import { Case } from './types';
+
+
+import { Case, ViewType } from './types';
 
 // --- DATE HELPERS ---
+
+// Returns the current date in YYYY-MM-DD format based on LOCAL system time, not UTC.
+// Fixes the bug where actions taken in the evening (GMT-3) were recorded as the next day.
+export const getLocalDateISOString = (): string => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // Parse YYYY-MM-DD string as local date (prevents timezone shifts)
 export const parseLocalYMD = (dateStr: string | undefined): Date | null => {
@@ -77,15 +89,213 @@ export const getAutomaticUpdatesForColumn = (targetColId: string): Partial<Case>
   return updates;
 };
 
-// --- CPF VALIDATION & FORMATTING ---
+// --- PREDICTIVE INTELLIGENCE ---
+
+export const getPredictiveInsights = (cases: Case[], currentCase: Case) => {
+    // 1. Filter completed cases of the same View Type to build a baseline
+    // We consider "Completed" cases those in specific columns or archived
+    const completedCases = cases.filter(c => 
+        c.view === currentCase.view && 
+        (c.columnId.includes('concluido') || c.columnId.includes('ativo') || c.columnId.includes('resultado') || c.columnId.includes('arquivado') || c.columnId.includes('transito')) &&
+        c.id !== currentCase.id
+    );
+
+    const minSample = 2; // Reduced for demo purposes
+    
+    // Default values if no data
+    let avgDuration = 45; // Default assumption days
+    let confidence: 'Baixa' | 'Média' | 'Alta' = 'Baixa';
+
+    if (completedCases.length >= minSample) {
+        let totalDays = 0;
+        completedCases.forEach(c => {
+            const start = new Date(c.createdAt).getTime();
+            const end = new Date(c.lastUpdate).getTime();
+            totalDays += (end - start) / (1000 * 60 * 60 * 24);
+        });
+        avgDuration = Math.round(totalDays / completedCases.length);
+        confidence = completedCases.length > 5 ? 'Alta' : 'Média';
+    }
+
+    const currentDuration = getDaysSince(currentCase.createdAt) || 0;
+    const remainingDays = Math.max(5, avgDuration - currentDuration);
+    
+    const predictedDate = new Date();
+    predictedDate.setDate(predictedDate.getDate() + remainingDays);
+
+    // Calculate "Risk"
+    // If current phase time > avg phase time, risk is high
+    const timeInCurrentPhase = getDaysSince(currentCase.lastUpdate) || 0;
+    const riskLevel = timeInCurrentPhase > 30 ? 'HIGH' : timeInCurrentPhase > 15 ? 'MEDIUM' : 'LOW';
+
+    // Mock Success Probability based on benefit type (just for demo intelligence)
+    // In a real app, this would check win rate per benefit type
+    const successProbability = currentCase.benefitType === '31' ? 85 : currentCase.benefitType === '88' ? 60 : 75;
+
+    return {
+        avgDuration, 
+        currentDuration, 
+        remainingDays, 
+        predictedDate: predictedDate.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
+        confidence, 
+        sampleSize: completedCases.length,
+        riskLevel,
+        successProbability
+    };
+};
+
+// --- AUDIT & DIFF LOGIC ---
+
+export const generateDiffLog = (original: Case, updated: Case): string => {
+    const changes: string[] = [];
+
+    // 1. SCALAR FIELDS (Text/Date/Selects)
+    const trackableFields: (keyof Case)[] = [
+        'clientName', 'cpf', 'phone', 'benefitType', 'protocolNumber', 
+        'benefitNumber', 'govPassword', 'urgency', 'deadlineEnd', 'periciaDate',
+        'motherName', 'fatherName', 'rg', 'pis', 'addressCity', 'maritalStatus', 'addressStreet'
+    ];
+
+    const labels: Record<string, string> = {
+        clientName: 'Nome',
+        cpf: 'CPF',
+        phone: 'Telefone',
+        benefitType: 'Benefício',
+        protocolNumber: 'Protocolo',
+        benefitNumber: 'NB',
+        govPassword: 'Senha Gov',
+        urgency: 'Prioridade',
+        deadlineEnd: 'Prazo Fatal',
+        periciaDate: 'Data Perícia',
+        motherName: 'Nome Mãe',
+        fatherName: 'Nome Pai',
+        rg: 'RG',
+        pis: 'PIS',
+        addressCity: 'Cidade',
+        maritalStatus: 'Est. Civil',
+        addressStreet: 'Rua'
+    };
+
+    trackableFields.forEach(field => {
+        const oldVal = original[field];
+        const newVal = updated[field];
+
+        // Simple comparison (handling undefined/null)
+        if (oldVal !== newVal) {
+            // Ignore empty to empty/undefined transitions
+            if ((!oldVal && !newVal)) return;
+            
+            let displayOld = oldVal ? String(oldVal) : '(vazio)';
+            let displayNew = newVal ? String(newVal) : '(vazio)';
+
+            // Format dates for readability
+            if (field.includes('Date') || field.includes('deadline')) {
+                displayOld = formatDate(oldVal as string) || '(vazio)';
+                displayNew = formatDate(newVal as string) || '(vazio)';
+            }
+
+            changes.push(`${labels[field] || field}: ${displayOld} ➝ ${displayNew}`);
+        }
+    });
+
+    // 2. ARRAY FIELDS: FILES
+    const oldFiles = original.files || [];
+    const newFiles = updated.files || [];
+    
+    // Added Files
+    newFiles.forEach(nf => {
+        if (!oldFiles.find(of => of.id === nf.id)) {
+            changes.push(`[+] Anexo: ${nf.name}`);
+        }
+    });
+    // Removed Files
+    oldFiles.forEach(of => {
+        if (!newFiles.find(nf => nf.id === of.id)) {
+            changes.push(`[-] Anexo removido: ${of.name}`);
+        }
+    });
+
+    // 3. ARRAY FIELDS: TAGS
+    const oldTags = original.tags || [];
+    const newTags = updated.tags || [];
+    const addedTags = newTags.filter(t => !oldTags.includes(t));
+    const removedTags = oldTags.filter(t => !newTags.includes(t));
+
+    addedTags.forEach(t => changes.push(`[+] Tag: ${t}`));
+    removedTags.forEach(t => changes.push(`[-] Tag removida: ${t}`));
+
+    // 4. ARRAY FIELDS: TASKS
+    const oldTasks = original.tasks || [];
+    const newTasks = updated.tasks || [];
+
+    // Added Tasks
+    newTasks.forEach(nt => {
+        if (!oldTasks.find(ot => ot.id === nt.id)) {
+            changes.push(`[+] Tarefa criada: "${nt.text}"`);
+        }
+    });
+    // Removed Tasks
+    oldTasks.forEach(ot => {
+        if (!newTasks.find(nt => nt.id === ot.id)) {
+            changes.push(`[-] Tarefa excluída: "${ot.text}"`);
+        }
+    });
+    // Changed Status
+    newTasks.forEach(nt => {
+        const oldTask = oldTasks.find(ot => ot.id === nt.id);
+        if (oldTask && oldTask.completed !== nt.completed) {
+            const status = nt.completed ? 'CONCLUÍDA' : 'PENDENTE';
+            changes.push(`[ok] Tarefa "${nt.text}" marcada como ${status}`);
+        }
+    });
+
+    // 5. ARRAY FIELDS: MISSING DOCS (Pendências)
+    const oldDocs = original.missingDocs || [];
+    const newDocs = updated.missingDocs || [];
+    newDocs.filter(d => !oldDocs.includes(d)).forEach(d => changes.push(`[!] Nova Pendência: ${d}`));
+    oldDocs.filter(d => !newDocs.includes(d)).forEach(d => changes.push(`[v] Pendência Resolvida: ${d}`));
+
+    if (changes.length === 0) return "Edição de detalhes.";
+    return changes.join(' | ');
+};
+
+// --- CPF, PHONE & BENEFIT FORMATTING ---
 
 export const formatCPF = (value: string) => {
   return value
     .replace(/\D/g, '') // Remove tudo o que não é dígito
     .replace(/(\d{3})(\d)/, '$1.$2') // Coloca um ponto entre o terceiro e o quarto dígitos
-    .replace(/(\d{3})(\d)/, '$1.$2') // Coloca um ponto entre o terceiro e o quarto dígitos de novo (para o segundo bloco de números)
+    .replace(/(\d{3})(\d)/, '$1.$2') // Coloca um ponto entre o terceiro e o quarto dígitos de novo
     .replace(/(\d{3})(\d{1,2})/, '$1-$2') // Coloca um hífen entre o terceiro e o quarto dígitos
     .replace(/(-\d{2})\d+?$/, '$1'); // Impede entrar mais de 11 dígitos
+};
+
+export const formatPhoneNumber = (value: string) => {
+  const numbers = value.replace(/\D/g, '');
+  
+  if (numbers.length > 10) {
+      // (11) 91234-5678 (Mobile)
+      return numbers
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{5})(\d)/, '$1-$2')
+        .replace(/(-\d{4})\d+?$/, '$1');
+  } else {
+      // (11) 1234-5678 (Landline - initial typing)
+      return numbers
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{4})(\d)/, '$1-$2')
+        .replace(/(-\d{4})\d+?$/, '$1');
+  }
+};
+
+export const formatBenefitNumber = (value: string) => {
+  // Pattern: 000.000.000-0
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+    .replace(/(-\d{1})\d+?$/, '$1');
 };
 
 export const validateCPF = (cpf: string): boolean => {

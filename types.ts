@@ -16,6 +16,17 @@ export interface ThemeConfig {
     iconColor: string;
 }
 
+export interface OfficeData {
+  name: string;
+  cnpj?: string;
+  oab?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  logo?: string; // Base64 or URL
+}
+
 export interface TransitionRule {
   from: string;
   to: string;
@@ -27,6 +38,14 @@ export interface WhatsAppTemplate {
   label: string;
   text: string;
   category: 'GERAL' | 'PERICIA' | 'DOCUMENTOS' | 'RESULTADO';
+}
+
+export interface DocumentTemplate {
+  id: string;
+  title: string;
+  category: 'PROCURACAO' | 'CONTRATO' | 'DECLARACAO' | 'REQUERIMENTO' | 'OUTROS';
+  content: string; // HTML/Rich text or Markdown content with placeholders
+  lastModified: string;
 }
 
 export interface SmartAction {
@@ -46,6 +65,16 @@ export interface CaseHistory {
   user: string;
   action: string;
   details?: string;
+}
+
+// NEW: Global System Logs for Audit (User management, Template changes, etc.)
+export interface SystemLog {
+  id: string;
+  date: string;
+  user: string;
+  action: string;
+  details: string;
+  category: 'SYSTEM' | 'SECURITY' | 'TEMPLATE' | 'USER_MANAGEMENT';
 }
 
 export interface Task {
@@ -70,6 +99,16 @@ export interface Notification {
   timestamp: string;
   isRead: boolean;
   caseId?: string; // Link to open the case
+  recipientId?: string; // ID do usuário destino. Se undefined, é global.
+}
+
+export interface MandadoSeguranca {
+  id: string;
+  npu: string; // Número do Processo
+  filingDate: string; // Data da Impetração
+  reason: 'DEMORA_ANALISE' | 'DEMORA_RECURSO' | 'OUTROS';
+  status: 'AGUARDANDO' | 'LIMINAR_DEFERIDA' | 'LIMINAR_INDEFERIDA' | 'SENTENCA';
+  notes?: string;
 }
 
 export interface Case {
@@ -81,6 +120,19 @@ export interface Case {
   phone: string;
   birthDate?: string; // YYYY-MM-DD
   
+  // Extended Client Info
+  rg?: string;
+  pis?: string;
+  motherName?: string;
+  fatherName?: string;
+  maritalStatus?: string;
+  addressZip?: string;
+  addressStreet?: string;
+  addressNumber?: string;
+  addressNeighborhood?: string;
+  addressCity?: string;
+  addressState?: string;
+
   // Specific Benefit Type Code (e.g., 41, 87)
   benefitType?: string;
 
@@ -120,8 +172,14 @@ export interface Case {
   benefitNumber?: string; // NB (Número do Benefício) - Gerado na Conclusão
   benefitDate?: string; // Data da Concessão/Decisão
   
+  // --- RECURSO ADM ---
   appealProtocolNumber?: string; // Protocolo do Recurso
   appealProtocolDate?: string;
+  appealDecisionDate?: string; // Data do Julgamento do Recurso
+  appealOutcome?: 'PROVIDO' | 'IMPROVIDO' | 'PARCIAL' | 'ANULADO';
+
+  // --- MANDADO DE SEGURANÇA (LISTA) ---
+  mandadosSeguranca?: MandadoSeguranca[];
 
   // --- DEADLINES ---
   deadlineStart?: string; // YYYY-MM-DD (Inicio do Prazo)

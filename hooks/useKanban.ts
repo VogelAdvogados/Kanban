@@ -1,11 +1,13 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Case, ViewType, TransitionType, CaseHistory, Task, Notification } from '../types';
-import { INITIAL_CASES, COLUMNS_BY_VIEW, TRANSITION_RULES, JUDICIAL_START_TASKS, USERS } from '../constants';
-import { getAutomaticUpdatesForColumn, getDaysDiff } from '../utils';
+import { Case, ViewType, TransitionType, CaseHistory, Task, Notification, DocumentTemplate, SystemLog } from '../types';
+import { INITIAL_CASES, COLUMNS_BY_VIEW, TRANSITION_RULES, DEFAULT_DOCUMENT_TEMPLATES } from '../constants';
+import { getAutomaticUpdatesForColumn, getDaysDiff, getDaysSince } from '../utils';
 
 const STORAGE_KEY = 'rambo_prev_cases_v1';
 const NOTIFICATIONS_KEY = 'rambo_prev_notifications_v1';
+const TEMPLATES_KEY = 'rambo_prev_templates_v1';
+const SYSTEM_LOGS_KEY = 'rambo_prev_system_logs_v1';
 
 export const useKanban = () => {
   // 1. Lazy Initialization from LocalStorage
@@ -23,6 +25,26 @@ export const useKanban = () => {
   const [notifications, setNotifications] = useState<Notification[]>(() => {
       try {
           const saved = localStorage.getItem(NOTIFICATIONS_KEY);
+          return saved ? JSON.parse(saved) : [];
+      } catch (e) {
+          return [];
+      }
+  });
+
+  // Document Templates State
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>(() => {
+      try {
+          const saved = localStorage.getItem(TEMPLATES_KEY);
+          return saved ? JSON.parse(saved) : DEFAULT_DOCUMENT_TEMPLATES;
+      } catch (e) {
+          return DEFAULT_DOCUMENT_TEMPLATES;
+      }
+  });
+
+  // System Logs State (Global Audit)
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>(() => {
+      try {
+          const saved = localStorage.getItem(SYSTEM_LOGS_KEY);
           return saved ? JSON.parse(saved) : [];
       } catch (e) {
           return [];
@@ -61,6 +83,8 @@ export const useKanban = () => {
           try {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(cases));
               localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications));
+              localStorage.setItem(TEMPLATES_KEY, JSON.stringify(documentTemplates));
+              localStorage.setItem(SYSTEM_LOGS_KEY, JSON.stringify(systemLogs));
           } catch (e) {
               console.error("Erro ao salvar dados", e);
           }
@@ -69,10 +93,10 @@ export const useKanban = () => {
       return () => {
           if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       };
-  }, [cases, notifications]);
+  }, [cases, notifications, documentTemplates, systemLogs]);
 
   // --- NOTIFICATION LOGIC ---
-  const addNotification = useCallback((title: string, description: string, type: Notification['type'], caseId?: string) => {
+  const addNotification = useCallback((title: string, description: string, type: Notification['type'], caseId?: string, recipientId?: string) => {
       const newNotif: Notification = {
           id: `n_${Date.now()}`,
           title,
@@ -80,7 +104,8 @@ export const useKanban = () => {
           type,
           timestamp: new Date().toISOString(),
           isRead: false,
-          caseId
+          caseId,
+          recipientId
       };
       setNotifications(prev => [newNotif, ...prev].slice(0, 50)); // Keep last 50
   }, []);
@@ -93,6 +118,19 @@ export const useKanban = () => {
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   }, []);
 
+  // --- SYSTEM LOG LOGIC ---
+  const addSystemLog = useCallback((action: string, details: string, user: string, category: SystemLog['category']) => {
+      const newLog: SystemLog = {
+          id: `sl_${Date.now()}`,
+          date: new Date().toISOString(),
+          user,
+          action,
+          details,
+          category
+      };
+      setSystemLogs(prev => [newLog, ...prev]);
+  }, []);
+
   // Check for Deadlines once on mount
   useEffect(() => {
       const checkedKey = `deadline_check_${new Date().toDateString()}`;
@@ -103,7 +141,8 @@ export const useKanban = () => {
           if (c.deadlineEnd) {
               const diff = getDaysDiff(c.deadlineEnd);
               if (diff !== null && diff <= 1 && diff >= 0) {
-                  addNotification('Prazo Vencendo!', `O caso ${c.clientName} tem um prazo fatal ${diff === 0 ? 'HOJE' : 'amanhã'}.`, 'WARNING', c.id);
+                  // Notifica apenas o responsável pelo caso
+                  addNotification('Prazo Vencendo!', `O caso ${c.clientName} tem um prazo fatal ${diff === 0 ? 'HOJE' : 'amanhã'}.`, 'WARNING', c.id, c.responsibleId);
                   alertCount++;
               }
           }
@@ -111,21 +150,56 @@ export const useKanban = () => {
       if(alertCount > 0) sessionStorage.setItem(checkedKey, 'true');
   }, [cases, addNotification]);
 
+  // --- OPTIMIZED DATA DERIVATION ---
 
-  // Computed Columns
-  const columns = useMemo(() => COLUMNS_BY_VIEW[currentView], [currentView]);
+  const activeViewCases = useMemo(() => {
+      return cases.filter(c => c.view === currentView);
+  }, [cases, currentView]);
 
-  // Optimized Filtering
   const filteredCases = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    return cases.filter(c => {
-        if (c.view !== currentView) return false;
+    const term = searchTerm.toLowerCase().trim();
+    
+    if (!term && !responsibleFilter && !urgencyFilter) {
+        return activeViewCases;
+    }
+
+    return activeViewCases.filter(c => {
         if (responsibleFilter && c.responsibleId !== responsibleFilter) return false;
         if (urgencyFilter && c.urgency !== urgencyFilter) return false;
-        if (term && !(c.clientName.toLowerCase().includes(term) || c.cpf.includes(term))) return false;
+        if (term) {
+            const matchesName = c.clientName.toLowerCase().includes(term);
+            const matchesCpf = c.cpf.includes(term);
+            const matchesInternalId = c.internalId.includes(term);
+            const matchesTags = c.tags?.some(t => t.toLowerCase().includes(term));
+            
+            if (!(matchesName || matchesCpf || matchesInternalId || matchesTags)) return false;
+        }
         return true;
     });
-  }, [cases, currentView, searchTerm, responsibleFilter, urgencyFilter]);
+  }, [activeViewCases, searchTerm, responsibleFilter, urgencyFilter]);
+
+  const columns = useMemo(() => COLUMNS_BY_VIEW[currentView], [currentView]);
+
+  const casesByColumn = useMemo(() => {
+    const map: Record<string, Case[]> = {};
+    columns.forEach(col => map[col.id] = []);
+    
+    filteredCases.forEach(c => {
+        if (map[c.columnId]) {
+            map[c.columnId].push(c);
+        }
+    });
+    return map;
+  }, [filteredCases, columns]);
+
+  const recurrencyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    cases.forEach(c => {
+        const key = c.cpf ? c.cpf.replace(/\D/g, '') : '';
+        if(key) map.set(key, (map.get(key) || 0) + 1);
+    });
+    return map;
+  }, [cases.length]); 
 
   // --- ACTIONS ---
 
@@ -143,214 +217,145 @@ export const useKanban = () => {
             date: new Date().toISOString(), 
             user: creatorName, 
             action: 'Criação', 
-            details: 'Ficha criada no sistema.' 
+            details: `Ficha interna criada no setor ${newCaseData.view}.`
         }]
     };
-    setCases(prev => [...prev, finalCase]);
-    addNotification('Novo Caso Criado', `${finalCase.clientName} foi adicionado por ${creatorName}.`, 'INFO', finalCase.id);
+    setCases(prev => [finalCase, ...prev]);
+    // Notification global (sem recipientId)
+    addNotification('Novo Atendimento', `Caso ${finalCase.internalId} iniciado para ${finalCase.clientName} por ${creatorName}.`, 'INFO', finalCase.id);
   }, [addNotification]);
 
   const updateCase = useCallback((updatedCase: Case, logMessage: string, userName: string) => {
     setCases(prev => prev.map(c => {
-        if (c.id !== updatedCase.id) return c;
-        
-        let history = updatedCase.history;
-        if (logMessage) {
-            const newHistory: CaseHistory = { 
-                id: `h${Date.now()}_upd`, 
-                date: new Date().toISOString(), 
-                user: userName, 
-                action: 'Atualização', 
-                details: logMessage 
-            };
-            history = [...history, newHistory];
+        if (c.id === updatedCase.id) {
+            // Add history only if there's a message, or handle standard updates
+            let newHistory = [...c.history];
+            if (logMessage) {
+                newHistory.push({
+                    id: `h_upd_${Date.now()}`,
+                    date: new Date().toISOString(),
+                    user: userName,
+                    action: 'Atualização',
+                    details: logMessage
+                });
+            }
+            return { ...updatedCase, history: newHistory, lastUpdate: new Date().toISOString() };
         }
-        
-        return { ...updatedCase, lastUpdate: new Date().toISOString(), history };
+        return c;
     }));
   }, []);
 
-  const finalizeMove = useCallback((caseToMove: Case, targetColumnId: string, extraData: Partial<Case> = {}, logDetail: string = '', userName: string = 'Sistema') => {
-      const updatedCase: Case = {
-        ...caseToMove, 
-        ...extraData, 
-        columnId: targetColumnId, 
-        lastUpdate: new Date().toISOString(),
-        history: [...caseToMove.history, { 
-            id: `h${Date.now()}_mov`, 
-            date: new Date().toISOString(), 
-            user: userName, 
-            action: 'Movimentação', 
-            details: logDetail 
-        }]
-      };
-      setCases(prev => prev.map(c => c.id === caseToMove.id ? updatedCase : c));
+  const finalizeMove = useCallback((c: Case, targetColId: string, specificUpdates: Partial<Case>, logDetails: string, userName: string) => {
+      const now = new Date().toISOString();
       
-      // Generate Notification
-      const colName = COLUMNS_BY_VIEW[updatedCase.view]?.find(c => c.id === targetColumnId)?.title || targetColumnId;
-      addNotification('Movimentação', `${caseToMove.clientName} foi movido para: ${colName} por ${userName}.`, 'INFO', caseToMove.id);
+      // TRACEABILITY: Calculate Duration in Previous Stage
+      const daysInPrev = getDaysSince(c.lastUpdate);
+      const durationLog = daysInPrev !== null && daysInPrev > 0 ? ` (Duração anterior: ${daysInPrev} dias)` : '';
 
-  }, [addNotification]);
+      const historyItem: CaseHistory = {
+          id: `h_move_${Date.now()}`,
+          date: now,
+          user: userName,
+          action: 'Movimentação',
+          details: `${logDetails}${durationLog}`
+      };
 
-  const executeZoneMove = useCallback((currentUser: { name: string, id: string }) => {
+      const autoUpdates = getAutomaticUpdatesForColumn(targetColId);
+
+      setCases(prev => prev.map(curr => {
+          if (curr.id === c.id) {
+              return {
+                  ...curr,
+                  ...specificUpdates,
+                  ...autoUpdates,
+                  columnId: targetColId,
+                  lastUpdate: now,
+                  history: [...curr.history, historyItem]
+              };
+          }
+          return curr;
+      }));
+  }, []);
+
+  const executeZoneMove = useCallback((currentUser: any) => {
       if (!zoneConfirmation) return;
       const { caseId, targetColId } = zoneConfirmation;
-      const caseToMove = cases.find(c => c.id === caseId);
-      
-      if (!caseToMove) {
-          setZoneConfirmation(null);
-          return;
+      const c = cases.find(x => x.id === caseId);
+      if (!c) return;
+
+      let log = '';
+      let updates: Partial<Case> = {};
+
+      if (targetColId === 'zone_judicial') {
+          updates = { view: 'JUDICIAL', columnId: 'jud_triagem' };
+          log = 'Processo movido para o setor Judicial.';
+      } else if (targetColId === 'zone_recurso') {
+          updates = { view: 'RECURSO_ADM', columnId: 'rec_triagem' };
+          log = 'Processo movido para o setor de Recurso Administrativo.';
+      } else if (targetColId === 'zone_mesa_decisao') {
+          updates = { view: 'MESA_DECISAO', columnId: 'mesa_aguardando' };
+          log = 'Processo enviado para Mesa de Decisão.';
+      } else if (targetColId === 'zone_arquivo') {
+          updates = { tags: [...(c.tags || []), 'ARQUIVADO'] };
+          log = 'Processo arquivado.';
+      } else if (targetColId === 'zone_admin') {
+          updates = { view: 'ADMIN', columnId: 'adm_triagem' };
+          log = 'Processo retornado para o Administrativo.';
       }
 
-      const move = (target: string, data: any, log: string) => finalizeMove(caseToMove, target, data, log, currentUser.name);
-
-      if (targetColId === 'zone_recurso') {
-        move('rec_producao', { view: 'RECURSO_ADM', responsibleId: USERS[0].id, responsibleName: USERS[0].name }, 'Enviado para Recurso via Mesa de Decisão.');
-      }
-      else if (targetColId === 'zone_judicial') {
-         const newTasks: Task[] = [
-             ...(caseToMove.tasks || []),
-             ...JUDICIAL_START_TASKS.map(t => ({...t, id: t.id + '_' + Date.now()}))
-         ];
-         move('jud_triagem', { view: 'JUDICIAL', tasks: newTasks, urgency: 'HIGH', responsibleId: USERS[1].id, responsibleName: USERS[1].name }, 'Judicializado via Zona de Ação.');
-      }
-      else if (targetColId === 'zone_arquivo') {
-         move('adm_arquivado', { view: 'ADMIN' }, 'Arquivado via Mesa de Decisão.');
-      }
-      else if (targetColId === 'zone_mesa_decisao') {
-        move('mesa_aguardando', { view: 'MESA_DECISAO' }, 'Enviado para Mesa de Decisão via Zona de Ação.');
-      }
-      else if (targetColId === 'zone_admin') {
-         move('adm_triagem', { view: 'ADMIN', responsibleId: USERS[2].id, responsibleName: USERS[2].name }, 'Retornado ao Administrativo via Zona de Ação.');
-      }
-      else if (targetColId === 'zone_ms') {
-        const msTasks: Task[] = [
-            ...JUDICIAL_START_TASKS.map(t => ({...t, id: t.id + '_ms_' + Date.now()})), 
-            { id: `t_ms_${Date.now()}`, text: 'Comprovar Demora (+120 dias)', completed: false }
-        ];
-
-        const msCase: Case = {
-            ...caseToMove,
-            id: `c${Date.now()}_ms`,
-            internalId: `${caseToMove.internalId}-MS`,
-            clientName: `${caseToMove.clientName} (MS - Segurança)`,
-            view: 'JUDICIAL',
-            columnId: 'jud_triagem', 
-            urgency: 'CRITICAL',
-            tasks: msTasks,
-            history: [{ id: `h_ms_${Date.now()}`, date: new Date().toISOString(), user: currentUser.name, action: 'Criação Automática', details: 'Processo derivado de Mandado de Segurança.' }]
-        };
-
-        const updatedOriginal = {
-             ...caseToMove,
-             history: [...caseToMove.history, { id: `h_orig_${Date.now()}`, date: new Date().toISOString(), user: currentUser.name, action: 'MS Impetrado', details: 'Gerada cópia paralela para Mandado de Segurança.' }]
-        };
-
-        setCases(prev => [...prev.map(c => c.id === caseToMove.id ? updatedOriginal : c), msCase]);
-        addNotification('Mandado de Segurança', `Novo processo de MS criado para ${caseToMove.clientName}.`, 'WARNING', msCase.id);
-      }
-
+      finalizeMove(c, updates.columnId || c.columnId, updates, log, currentUser?.name || 'Sistema');
       setZoneConfirmation(null);
-  }, [zoneConfirmation, cases, finalizeMove, addNotification]);
+      setDraggedCaseId(null);
+  }, [zoneConfirmation, cases, finalizeMove]);
 
-
-  const handleDrop = useCallback((targetColumnId: string, currentUser: { name: string, id: string }) => {
+  const handleDrop = useCallback((targetColId: string, currentUser: any) => {
     if (!draggedCaseId) return;
-    const caseToMove = cases.find(c => c.id === draggedCaseId);
-    if (!caseToMove || caseToMove.columnId === targetColumnId) { 
-        setDraggedCaseId(null); 
-        return; 
-    }
+    const c = cases.find(x => x.id === draggedCaseId);
+    if (!c) return;
 
-    if (targetColumnId.startsWith('zone_')) {
-        let title = "Confirmar Ação";
-        let description = "Deseja mover este processo?";
+    // 1. Handle Zones
+    if (targetColId.startsWith('zone_')) {
+        let title = 'Mover Processo';
+        let description = 'Tem certeza que deseja mover este processo?';
         let isDangerous = false;
 
-        if (targetColumnId === 'zone_judicial') {
-            title = "Judicializar Processo";
-            description = "Isso moverá o caso para o fluxo Judicial, criará tarefas de coleta e mudará a urgência para Alta. Confirmar?";
-        }
-        else if (targetColumnId === 'zone_recurso') {
-            title = "Enviar para Recurso";
-            description = "O processo será movido para o fluxo de Recurso Administrativo.";
-        }
-        else if (targetColumnId === 'zone_arquivo') {
-            title = "Arquivar Processo";
-            description = "Isso removerá o processo das visões ativas. Deseja arquivar?";
+        if (targetColId === 'zone_judicial') {
+            title = 'Judicializar Processo';
+            description = 'O processo será transferido para o fluxo Judicial. Confirma?';
+        } else if (targetColId === 'zone_arquivo') {
+            title = 'Arquivar Processo';
+            description = 'O processo será removido do fluxo ativo. Confirma?';
             isDangerous = true;
-        }
-        else if (targetColumnId === 'zone_ms') {
-            title = "Impetrar Mandado de Segurança";
-            description = "Isso criará uma CÓPIA do processo no Judicial para o MS, mantendo o original no Administrativo. Confirmar?";
-            isDangerous = true;
-        }
-        else if (targetColumnId === 'zone_mesa_decisao') {
-            title = "Enviar p/ Mesa de Decisão";
-            description = "Enviar para análise estratégica do advogado sênior?";
-        }
-        else if (targetColumnId === 'zone_admin') {
-            title = "Retornar ao Administrativo";
-            description = "O processo voltará para o início do fluxo administrativo. Confirmar?";
         }
 
-        setZoneConfirmation({
-            caseId: caseToMove.id,
-            targetColId: targetColumnId,
-            title,
-            description,
-            isDangerous
-        });
-        setDraggedCaseId(null);
+        setZoneConfirmation({ caseId: c.id, targetColId, title, description, isDangerous });
         return;
     }
 
-    const rule = TRANSITION_RULES.find(r => 
-        (r.from === caseToMove.columnId || r.from === '*') && 
-        r.to === targetColumnId
-    );
-    
+    // 2. Handle Normal Columns
+    const rule = TRANSITION_RULES.find(r => (r.from === c.columnId || r.from === '*') && r.to === targetColId);
+
     if (rule) {
-        setPendingMove({ caseId: caseToMove.id, targetColId: targetColumnId });
+        setPendingMove({ caseId: c.id, targetColId });
         setTransitionType(rule.type);
-        setDraggedCaseId(null);
-        return;
+    } else {
+        // Direct Move
+        const targetColTitle = COLUMNS_BY_VIEW[currentView].find(col => col.id === targetColId)?.title || targetColId;
+        finalizeMove(c, targetColId, {}, `Movido para ${targetColTitle}`, currentUser?.name || 'Sistema');
     }
-
-    const autoUpdates = getAutomaticUpdatesForColumn(targetColumnId);
-    finalizeMove(caseToMove, targetColumnId, autoUpdates, 'Movimentação padrão.', currentUser.name);
     setDraggedCaseId(null);
-  }, [draggedCaseId, cases, finalizeMove]);
+  }, [draggedCaseId, cases, currentView, finalizeMove]);
 
   return {
-    cases,
-    setCases,
-    notifications, // EXPORT
-    markNotificationAsRead, // EXPORT
-    markAllNotificationsAsRead, // EXPORT
-    filteredCases,
-    currentView,
-    setCurrentView,
-    columns,
-    searchTerm,
-    setSearchTerm,
-    responsibleFilter,
-    setResponsibleFilter,
-    urgencyFilter,
-    setUrgencyFilter,
-    draggedCaseId,
-    setDraggedCaseId,
-    pendingMove,
-    setPendingMove,
-    transitionType,
-    setTransitionType,
-    generateInternalId,
-    addCase,
-    updateCase,
-    handleDrop,
-    finalizeMove,
-    zoneConfirmation,
-    setZoneConfirmation,
-    executeZoneMove
+    cases, setCases, filteredCases, casesByColumn, recurrencyMap,
+    currentView, setCurrentView, columns,
+    searchTerm, setSearchTerm, responsibleFilter, setResponsibleFilter,
+    urgencyFilter, setUrgencyFilter, draggedCaseId, setDraggedCaseId,
+    pendingMove, setPendingMove, transitionType, setTransitionType,
+    generateInternalId, addCase, updateCase, handleDrop, finalizeMove,
+    zoneConfirmation, setZoneConfirmation, executeZoneMove,
+    notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead,
+    documentTemplates, setDocumentTemplates,
+    systemLogs, addSystemLog
   };
 };

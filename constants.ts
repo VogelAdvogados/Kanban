@@ -1,5 +1,7 @@
-import { ColumnDefinition, Case, User, ViewType, TransitionRule, Task, SmartAction, WhatsAppTemplate, ThemeConfig } from './types';
-import { LayoutDashboard, Stethoscope, Scale, FileText, Gavel, Archive, ArrowRight, RefreshCw, AlertTriangle, BadgeDollarSign, Siren } from 'lucide-react';
+
+
+import { ColumnDefinition, Case, User, ViewType, TransitionRule, Task, SmartAction, WhatsAppTemplate, ThemeConfig, DocumentTemplate } from './types';
+import { LayoutDashboard, Stethoscope, Scale, FileText, Gavel, Archive, ArrowRight, RefreshCw, AlertTriangle, BadgeDollarSign, Siren, Search, FileCheck, Send, Calculator, Calendar, CheckCircle, XCircle, Plus } from 'lucide-react';
 
 // --- USER IDENTITY COLORS ---
 export const USER_COLORS = [
@@ -52,6 +54,173 @@ export const COMMON_DOCUMENTS = [
     "Certidão de Casamento/Nascimento",
     "Contrato de Honorários Assinado",
     "Procuração Assinada"
+];
+
+// --- DOCUMENT VARIABLES (For Generator) ---
+export const DOCUMENT_VARIABLES = [
+    { key: '{NOME_CLIENTE}', label: 'Nome do Cliente' },
+    { key: '{CPF}', label: 'CPF' },
+    { key: '{RG}', label: 'RG' },
+    { key: '{PIS}', label: 'PIS' },
+    { key: '{TELEFONE}', label: 'Telefone' },
+    { key: '{ESTADO_CIVIL}', label: 'Estado Civil' },
+    { key: '{DATA_NASCIMENTO}', label: 'Data de Nascimento' },
+    { key: '{NOME_MAE}', label: 'Nome da Mãe' },
+    // Endereço Granular
+    { key: '{ENDERECO_COMPLETO}', label: 'Endereço (Completo Formatado)' },
+    { key: '{RUA}', label: 'Rua/Logradouro' },
+    { key: '{NUMERO}', label: 'Número' },
+    { key: '{BAIRRO}', label: 'Bairro' },
+    { key: '{CIDADE}', label: 'Cidade' },
+    { key: '{UF}', label: 'UF' },
+    { key: '{CEP}', label: 'CEP' },
+    // Processo
+    { key: '{NB}', label: 'Número do Benefício (NB)' },
+    { key: '{NPU}', label: 'Processo Judicial (NPU)' },
+    // Datas e Escritório
+    { key: '{DATA_ATUAL}', label: 'Data de Hoje (Extenso)' },
+    { key: '{DIA}', label: 'Dia Atual (DD)' },
+    { key: '{MES}', label: 'Mês Atual (Nome)' },
+    { key: '{ANO}', label: 'Ano Atual (AAAA)' },
+    { key: '{ADVOGADO_RESPONSAVEL}', label: 'Advogado Responsável' },
+];
+
+// --- DEFAULT DOCUMENT TEMPLATES ---
+export const DEFAULT_DOCUMENT_TEMPLATES: DocumentTemplate[] = [
+    {
+        id: 'tpl_procuracao_ad_judicia',
+        title: 'Procuração Ad Judicia',
+        category: 'PROCURACAO',
+        lastModified: new Date().toISOString(),
+        content: `
+        <h3 style="text-align: center;"><strong>PROCURAÇÃO AD JUDICIA ET EXTRA</strong></h3>
+        <p>&nbsp;</p>
+        <p><strong>OUTORGANTE:</strong> <strong>{NOME_CLIENTE}</strong>, nacionalidade brasileira, {ESTADO_CIVIL}, portador(a) do RG nº {RG} e CPF nº {CPF}, residente e domiciliado(a) na {ENDERECO_COMPLETO}.</p>
+        <p>&nbsp;</p>
+        <p><strong>OUTORGADO: {ADVOGADO_RESPONSAVEL}</strong>, brasileiro, advogado, inscrito na OAB sob o nº 00.000, com escritório profissional à Rua Exemplo, nº 100, Centro.</p>
+        <p>&nbsp;</p>
+        <p><strong>PODERES:</strong> Pelo presente instrumento particular de procuração, o(a) OUTORGANTE nomeia e constitui o(a) OUTORGADO(A) seu(sua) bastante procurador(a), conferindo-lhe amplos poderes para o foro em geral, com a cláusula "ad judicia et extra", em qualquer Juízo, Instância ou Tribunal, podendo propor contra quem de direito, as ações competentes e defendê-lo(a) nas contrárias, seguindo umas e outras, até final decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda, poderes especiais para receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, receber, dar quitação, firmar compromisso e substabelecer esta em outrem, com ou sem reservas de iguais poderes, para agir em conjunto ou separadamente, dando tudo por bom, firme e valioso, especialmente para fins de <strong>REQUERIMENTO DE BENEFÍCIO PREVIDENCIÁRIO E AÇÃO JUDICIAL PREVIDENCIÁRIA</strong>.</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">{CIDADE}, {DATA_ATUAL}.</p>
+        <p>&nbsp;</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">_________________________________________________</p>
+        <p style="text-align: center;"><strong>{NOME_CLIENTE}</strong></p>
+        `
+    },
+    {
+        id: 'tpl_hipossuficiencia',
+        title: 'Declaração de Hipossuficiência',
+        category: 'DECLARACAO',
+        lastModified: new Date().toISOString(),
+        content: `
+        <h3 style="text-align: center;"><strong>DECLARAÇÃO DE HIPOSSUFICIÊNCIA</strong></h3>
+        <p>&nbsp;</p>
+        <p>Eu, <strong>{NOME_CLIENTE}</strong>, inscrito(a) no CPF sob o nº {CPF}, RG nº {RG}, residente e domiciliado(a) na {ENDERECO_COMPLETO}.</p>
+        <p>&nbsp;</p>
+        <p><strong>DECLARO</strong>, para os devidos fins de direito e sob as penas da lei, que não tenho condições financeiras de arcar com as custas processuais e honorários advocatícios sem prejuízo do meu próprio sustento e de minha família. Por tal razão, pleiteio os benefícios da <strong>JUSTIÇA GRATUITA</strong>, assegurados pela Constituição Federal, artigo 5º, LXXIV e pela Lei 13.105/2015 (CPC), artigo 98 e seguintes.</p>
+        <p>&nbsp;</p>
+        <p>Por ser verdade, firmo a presente declaração.</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">{CIDADE}, {DATA_ATUAL}.</p>
+        <p>&nbsp;</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">_________________________________________________</p>
+        <p style="text-align: center;"><strong>{NOME_CLIENTE}</strong></p>
+        `
+    },
+    {
+        id: 'tpl_residencia',
+        title: 'Declaração de Residência',
+        category: 'DECLARACAO',
+        lastModified: new Date().toISOString(),
+        content: `
+        <h3 style="text-align: center;"><strong>DECLARAÇÃO DE RESIDÊNCIA</strong></h3>
+        <p>&nbsp;</p>
+        <p>Eu, <strong>{NOME_CLIENTE}</strong>, portador(a) do RG nº {RG} e inscrito(a) no CPF sob o nº {CPF}.</p>
+        <p>&nbsp;</p>
+        <p><strong>DECLARO</strong> ao INSS e a quem possa interessar, sob as penas da Lei (art. 299 do Código Penal), que sou residente e domiciliado(a) no seguinte endereço:</p>
+        <p>&nbsp;</p>
+        <p><strong>Logradouro:</strong> {RUA}, nº {NUMERO}</p>
+        <p><strong>Bairro:</strong> {BAIRRO}</p>
+        <p><strong>Cidade/UF:</strong> {CIDADE} - {UF}</p>
+        <p><strong>CEP:</strong> {CEP}</p>
+        <p>&nbsp;</p>
+        <p>Declaro ainda estar ciente de que a falsidade da presente declaração pode implicar na sanção penal prevista no art. 299 do Código Penal Brasileiro, bem como nas sanções administrativas e cíveis cabíveis.</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">{CIDADE}, {DATA_ATUAL}.</p>
+        <p>&nbsp;</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">_________________________________________________</p>
+        <p style="text-align: center;"><strong>{NOME_CLIENTE}</strong></p>
+        `
+    },
+    {
+        id: 'tpl_contrato_aposentadoria',
+        title: 'Contrato Hon. Aposentadoria',
+        category: 'CONTRATO',
+        lastModified: new Date().toISOString(),
+        content: `
+        <h3 style="text-align: center;"><strong>CONTRATO DE HONORÁRIOS ADVOCATÍCIOS (APOSENTADORIA)</strong></h3>
+        <p>&nbsp;</p>
+        <p><strong>CONTRATANTE:</strong> <strong>{NOME_CLIENTE}</strong>, brasileiro(a), {ESTADO_CIVIL}, portador(a) do CPF nº {CPF}, residente e domiciliado(a) na {ENDERECO_COMPLETO}.</p>
+        <p><strong>CONTRATADO: {ADVOGADO_RESPONSAVEL}</strong>, advogado inscrito na OAB sob o nº 00.000.</p>
+        <p>&nbsp;</p>
+        <p><strong>CLÁUSULA PRIMEIRA - DO OBJETO:</strong> O presente instrumento tem como objeto a prestação de serviços advocatícios para propositura e acompanhamento de <strong>PEDIDO DE APOSENTADORIA</strong> junto ao INSS e, se necessário, na via judicial.</p>
+        <p>&nbsp;</p>
+        <p><strong>CLÁUSULA SEGUNDA - DOS HONORÁRIOS:</strong> Em remuneração aos serviços profissionais ora pactuados, o(a) CONTRATANTE pagará ao CONTRATADO honorários equivalentes a:</p>
+        <ul>
+            <li><strong>30% (trinta por cento)</strong> sobre o valor bruto dos atrasados (parcelas vencidas) recebidos administrativamente ou judicialmente.</li>
+            <li>O valor correspondente aos <strong>03 (três) primeiros benefícios mensais</strong> integrais recebidos.</li>
+        </ul>
+        <p>&nbsp;</p>
+        <p><strong>CLÁUSULA TERCEIRA - DAS DESPESAS:</strong> As despesas com custas judiciais e extrajudiciais, se houver, correrão por conta do(a) CONTRATANTE, exceto se beneficiário da Justiça Gratuita.</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">{CIDADE}, {DATA_ATUAL}.</p>
+        <p>&nbsp;</p>
+        <div style="display: flex; justify-content: space-between; padding-top: 50px;">
+            <div style="text-align: center; width: 45%;">
+                <p>__________________________</p>
+                <p><strong>{ADVOGADO_RESPONSAVEL}</strong></p>
+            </div>
+            <div style="text-align: center; width: 45%;">
+                <p>__________________________</p>
+                <p><strong>{NOME_CLIENTE}</strong></p>
+            </div>
+        </div>
+        `
+    },
+    {
+        id: 'tpl_contrato_aux_doenca',
+        title: 'Contrato Hon. Auxílio Doença',
+        category: 'CONTRATO',
+        lastModified: new Date().toISOString(),
+        content: `
+        <h3 style="text-align: center;"><strong>CONTRATO DE HONORÁRIOS ADVOCATÍCIOS (AUXÍLIO DOENÇA)</strong></h3>
+        <p>&nbsp;</p>
+        <p><strong>CONTRATANTE:</strong> <strong>{NOME_CLIENTE}</strong>, brasileiro(a), {ESTADO_CIVIL}, portador(a) do CPF nº {CPF}, residente e domiciliado(a) na {ENDERECO_COMPLETO}.</p>
+        <p><strong>CONTRATADO: {ADVOGADO_RESPONSAVEL}</strong>, advogado inscrito na OAB sob o nº 00.000.</p>
+        <p>&nbsp;</p>
+        <p><strong>CLÁUSULA PRIMEIRA - DO OBJETO:</strong> O presente contrato tem por objeto o requerimento administrativo e/ou judicial de <strong>BENEFÍCIO POR INCAPACIDADE (AUXÍLIO-DOENÇA/APOSENTADORIA POR INVALIDEZ)</strong>.</p>
+        <p>&nbsp;</p>
+        <p><strong>CLÁUSULA SEGUNDA - DOS HONORÁRIOS:</strong> O(A) CONTRATANTE pagará, a título de honorários advocatícios, o valor correspondente a <strong>30% (trinta por cento)</strong> sobre o proveito econômico da ação (atrasados), com valor mínimo estipulado em R$ 1.500,00 (hum mil e quinhentos reais) em caso de êxito.</p>
+        <p>&nbsp;</p>
+        <p><strong>CLÁUSULA TERCEIRA:</strong> Não havendo êxito na demanda, nada será devido a título de honorários (Cláusula <em>Ad Exitum</em>).</p>
+        <p>&nbsp;</p>
+        <p style="text-align: center;">{CIDADE}, {DATA_ATUAL}.</p>
+        <p>&nbsp;</p>
+        <div style="display: flex; justify-content: space-between; padding-top: 50px;">
+            <div style="text-align: center; width: 45%;">
+                <p>__________________________</p>
+                <p><strong>{ADVOGADO_RESPONSAVEL}</strong></p>
+            </div>
+            <div style="text-align: center; width: 45%;">
+                <p>__________________________</p>
+                <p><strong>{NOME_CLIENTE}</strong></p>
+            </div>
+        </div>
+        `
+    }
 ];
 
 // --- WHATSAPP TEMPLATES ---
@@ -161,12 +330,44 @@ export const JUDICIAL_START_TASKS: Task[] = [
   { id: 't4', text: 'Baixar Processo Administrativo (Cópia Integral)', completed: false },
 ];
 
+// --- SUGGESTED ACTIONS (The "Brain" of the Facilitator) ---
+export const SUGGESTED_ACTIONS: Record<string, { label: string, icon: any, actionType: 'MOVE' | 'LINK' | 'TASK' | 'WHATSAPP', target?: string, urgency?: string }> = {
+    // Administrativo
+    'adm_triagem': { label: 'Analisar Docs', icon: Search, actionType: 'MOVE', target: 'adm_montagem' },
+    'adm_docs': { label: 'Cobrar Cliente', icon: Send, actionType: 'WHATSAPP' },
+    'adm_montagem': { label: 'Protocolar', icon: FileText, actionType: 'MOVE', target: 'adm_protocolo' },
+    'adm_protocolo': { label: 'Checar Status', icon: RefreshCw, actionType: 'LINK' }, // Link pro MEU INSS
+    'adm_exigencia': { label: 'Cumprir Exigência', icon: FileCheck, actionType: 'TASK' },
+    'adm_concluido': { label: 'Analisar Decisão', icon: Search, actionType: 'MOVE', target: 'zone_mesa_decisao' },
+    
+    // Auxílio Doença
+    'aux_chegada': { label: 'Agendar Perícia', icon: Calendar, actionType: 'MOVE', target: 'aux_protocolo' },
+    'aux_pericia': { label: 'Consultar Laudo', icon: FileText, actionType: 'MOVE', target: 'aux_aguarda_resultado' },
+    'aux_aguarda_resultado': { label: 'Ver Resultado', icon: Search, actionType: 'MOVE', target: 'aux_ativo' },
+    'aux_ativo': { label: 'Calcular RMI', icon: Calculator, actionType: 'TASK' },
+    'aux_prorrogacao': { label: 'Checar Prorrogação', icon: RefreshCw, actionType: 'LINK' },
+    'aux_indeferido': { label: 'Recorrer / Judicial', icon: Scale, actionType: 'MOVE', target: 'zone_mesa_decisao' },
+
+    // Recurso
+    'rec_triagem': { label: 'Redigir Recurso', icon: FileText, actionType: 'MOVE', target: 'rec_producao' },
+    'rec_producao': { label: 'Protocolar Recurso', icon: Send, actionType: 'MOVE', target: 'rec_protocolado' },
+    'rec_protocolado': { label: 'Monitorar Julgamento', icon: Search, actionType: 'MOVE', target: 'rec_aguardando' },
+    'rec_aguardando': { label: 'Consultar Andamento', icon: RefreshCw, actionType: 'LINK' },
+    'rec_resultado': { label: 'Analisar Acórdão', icon: Gavel, actionType: 'MOVE', target: 'zone_judicial' },
+
+    // Judicial
+    'jud_triagem': { label: 'Ajuizar Ação', icon: Scale, actionType: 'MOVE', target: 'jud_ajuizada' },
+    'jud_coleta': { label: 'Cobrar Docs', icon: Send, actionType: 'WHATSAPP' },
+    'jud_montagem': { label: 'Ajuizar Ação', icon: Scale, actionType: 'MOVE', target: 'jud_ajuizada' },
+};
+
+
 // --- SMART ACTIONS CONFIGURATION (Dynamic Buttons) ---
 export const SMART_ACTIONS_CONFIG: Record<string, { title: string, description: string, actions: SmartAction[] }> = {
   // 1. Final do Administrativo -> Mesa de Decisão
   'ADMIN_adm_concluido': {
     title: 'Análise Administrativa Concluída',
-    description: 'O processo técnico foi finalizado. Envie para o advogado sênior definir a estratégia.',
+    description: 'O processo técnico foi finalizado. Defina a estratégia ou inicie um novo ciclo.',
     actions: [
       {
         label: 'Enviar p/ Mesa de Decisão',
@@ -175,9 +376,79 @@ export const SMART_ACTIONS_CONFIG: Record<string, { title: string, description: 
         icon: Gavel,
         colorClass: 'bg-slate-800 text-white hover:bg-slate-700',
         urgency: 'NORMAL'
+      },
+      {
+        label: 'Novo Protocolo (Reentrada)',
+        targetView: 'ADMIN',
+        targetColumnId: 'adm_protocolo',
+        icon: RefreshCw,
+        colorClass: 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50',
+        urgency: 'NORMAL'
       }
     ]
   },
+  // 1.1 Pendência Documental
+  'ADMIN_adm_docs': {
+    title: 'Pendência Documental',
+    description: 'Documentos pendentes impedem o andamento. Cobre o cliente ou avance se já recebeu.',
+    actions: [
+        {
+            label: 'Cobrar via WhatsApp',
+            targetView: 'ADMIN', 
+            targetColumnId: 'adm_docs', // No move, just action
+            icon: Send, 
+            colorClass: 'bg-green-600 text-white hover:bg-green-700',
+            urgency: 'HIGH'
+        },
+        {
+            label: 'Docs Recebidos -> Montagem',
+            targetView: 'ADMIN',
+            targetColumnId: 'adm_montagem',
+            icon: FileCheck,
+            colorClass: 'bg-blue-600 text-white hover:bg-blue-700',
+            urgency: 'NORMAL'
+        }
+    ]
+  },
+  // 1.2 Cumprimento de Exigência
+  'ADMIN_adm_exigencia': {
+    title: 'Exigência Aberta',
+    description: 'O INSS solicitou documentos complementares. Cumpra o prazo para evitar indeferimento.',
+    actions: [
+        {
+            label: 'Exigência Cumprida',
+            targetView: 'ADMIN',
+            targetColumnId: 'adm_protocolo', // Returns to analysis
+            icon: CheckCircle,
+            colorClass: 'bg-emerald-600 text-white hover:bg-emerald-700',
+            urgency: 'HIGH'
+        }
+    ]
+  },
+  // 1.3 Protocolo INSS (Decisões)
+  'ADMIN_adm_protocolo': {
+    title: 'Processo em Análise',
+    description: 'Aguardando decisão do INSS. Verifique se houve movimentação no sistema.',
+    actions: [
+        {
+            label: 'Caiu em Exigência',
+            targetView: 'ADMIN',
+            targetColumnId: 'adm_exigencia',
+            icon: AlertTriangle,
+            colorClass: 'bg-yellow-500 text-white hover:bg-yellow-600',
+            urgency: 'HIGH'
+        },
+        {
+            label: 'Conclusão (Deferido/Indeferido)',
+            targetView: 'ADMIN',
+            targetColumnId: 'adm_concluido',
+            icon: FileText,
+            colorClass: 'bg-blue-600 text-white hover:bg-blue-700',
+            urgency: 'NORMAL'
+        }
+    ]
+  },
+
   // 2. Mesa de Decisão -> Destinos
   'MESA_DECISAO_mesa_aguardando': {
     title: 'Mesa de Decisão: Estratégia',
@@ -213,7 +484,7 @@ export const SMART_ACTIONS_CONFIG: Record<string, { title: string, description: 
   // 3. Recurso Negado -> Judicial
   'RECURSO_ADM_rec_resultado': {
     title: 'Resultado do Recurso',
-    description: 'O recurso foi concluído. Se negado, encaminhe para o judicial.',
+    description: 'O recurso foi concluído. Defina o próximo passo.',
     actions: [
       {
         label: 'Recurso Negado? Ajuizar Ação',
@@ -223,6 +494,14 @@ export const SMART_ACTIONS_CONFIG: Record<string, { title: string, description: 
         colorClass: 'bg-indigo-600 text-white hover:bg-indigo-700',
         urgency: 'HIGH',
         tasksToAdd: JUDICIAL_START_TASKS
+      },
+      {
+        label: 'Novo Pedido ADM (Reentrada)',
+        targetView: 'ADMIN',
+        targetColumnId: 'adm_protocolo',
+        icon: RefreshCw,
+        colorClass: 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50',
+        urgency: 'NORMAL'
       }
     ]
   },
@@ -239,6 +518,53 @@ export const SMART_ACTIONS_CONFIG: Record<string, { title: string, description: 
         colorClass: 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50',
         urgency: 'HIGH'
       }
+    ]
+  },
+  // 4.1 Auxílio Doença -> Resultado Prorrogação
+  'AUX_DOENCA_aux_prorrogacao': {
+    title: 'Pedido de Prorrogação (PP)',
+    description: 'O pedido de prorrogação foi feito. Registre o resultado da nova perícia.',
+    actions: [
+        {
+            label: 'Prorrogação Deferida',
+            targetView: 'AUX_DOENCA',
+            targetColumnId: 'aux_ativo',
+            icon: CheckCircle,
+            colorClass: 'bg-emerald-600 text-white hover:bg-emerald-700',
+            urgency: 'NORMAL'
+        },
+        {
+            label: 'Prorrogação Indeferida',
+            targetView: 'AUX_DOENCA',
+            targetColumnId: 'aux_indeferido',
+            icon: XCircle,
+            colorClass: 'bg-red-600 text-white hover:bg-red-700',
+            urgency: 'HIGH'
+        }
+    ]
+  },
+  // 4.2 Auxílio Doença -> Indeferido (Ações de Reentrada)
+  'AUX_DOENCA_aux_indeferido': {
+    title: 'Benefício Indeferido/Cessado',
+    description: 'O benefício foi negado. Você pode judicializar ou fazer um novo pedido.',
+    actions: [
+        {
+            label: 'Judicializar Agora',
+            targetView: 'JUDICIAL',
+            targetColumnId: 'jud_triagem',
+            icon: Scale,
+            colorClass: 'bg-blue-600 text-white hover:bg-blue-700',
+            urgency: 'HIGH',
+            tasksToAdd: JUDICIAL_START_TASKS
+        },
+        {
+            label: 'Novo Pedido AD (Reentrada)',
+            targetView: 'AUX_DOENCA',
+            targetColumnId: 'aux_protocolo',
+            icon: RefreshCw,
+            colorClass: 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50',
+            urgency: 'NORMAL'
+        }
     ]
   }
 };

@@ -61,7 +61,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         </div>
 
         {/* List */}
-        <div className="max-h-[400px] overflow-y-auto custom-scroll">
+        <div className="max-h-[400px] overflow-y-auto kanban-scroll">
             {notifications.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 flex flex-col items-center">
                     <Bell size={32} className="mb-2 opacity-20" />

@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { Case } from '../types';
-import { PieChart, BarChart, Calendar, AlertTriangle, TrendingUp, Users, Clock, Briefcase, CheckCircle, AlertOctagon, Layers, ArrowRight, MessageCircle } from 'lucide-react';
+import { Briefcase, Layers, AlertTriangle, Clock, Calendar, MessageCircle, X, TrendingUp } from 'lucide-react';
 import { getDaysSince, getDaysDiff, formatDate, parseLocalYMD } from '../utils';
 import { VIEW_CONFIG, WHATSAPP_TEMPLATES } from '../constants';
+import { DashboardKPIs } from './dashboard/DashboardKPIs';
 
 interface DashboardProps {
   cases: Case[];
@@ -11,11 +12,9 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
   
-  // 1. Statistics Calculation
   const stats = useMemo(() => {
     const total = cases.length;
     
-    // Concessions vs Denials
     const conceded = cases.filter(c => 
         ['adm_concluido', 'aux_ativo', 'jud_transito', 'jud_cumprimento', 'jud_rpv'].includes(c.columnId)
     ).length;
@@ -26,52 +25,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
 
     const rate = (conceded + denied) > 0 ? Math.round((conceded / (conceded + denied)) * 100) : 0;
 
-    // Workload by Responsible
     const workloadMap: Record<string, number> = {};
     cases.forEach(c => {
-        const name = c.responsibleName.split(' ')[0] + ' ' + (c.responsibleName.split(' ')[1]?.[0] || '') + '.'; // Short name
+        const name = c.responsibleName.split(' ')[0] + ' ' + (c.responsibleName.split(' ')[1]?.[0] || '') + '.'; 
         workloadMap[name] = (workloadMap[name] || 0) + 1;
     });
     const workload = Object.entries(workloadMap).sort((a, b) => b[1] - a[1]);
 
-    // Distribution by View
     const viewMap: Record<string, number> = {};
     cases.forEach(c => {
         viewMap[c.view] = (viewMap[c.view] || 0) + 1;
     });
 
-    // Stagnated Cases (> 90 days)
     const stagnatedCases = cases.filter(c => {
         const days = getDaysSince(c.lastUpdate);
         return days !== null && days > 90;
     }).sort((a, b) => getDaysSince(b.lastUpdate)! - getDaysSince(a.lastUpdate)!);
 
-    // Upcoming Deadlines (Next 7 days)
     const upcomingDeadlines = cases.filter(c => {
         const diff = getDaysDiff(c.deadlineEnd);
         return diff !== null && diff >= 0 && diff <= 7;
     }).sort((a, b) => getDaysDiff(a.deadlineEnd)! - getDaysDiff(b.deadlineEnd)!);
 
-    // Bottlenecks
-    const bottleneckMap: Record<string, number> = {};
-    cases.forEach(c => {
-        if (!bottleneckMap[c.columnId]) bottleneckMap[c.columnId] = 0;
-        bottleneckMap[c.columnId]++;
-    });
-    const bottlenecks = Object.entries(bottleneckMap)
-        .sort(([,a], [,b]) => b - a)
-        .slice(0, 5); 
-
-    // Birthdays TODAY
     const today = new Date();
-    const birthdaysToday = cases.filter(c => {
-        if(!c.birthDate) return false;
+    const uniqueClients = new Map();
+    cases.forEach(c => {
+        if(c.birthDate && !uniqueClients.has(c.cpf)) {
+            uniqueClients.set(c.cpf, c);
+        }
+    });
+    
+    const birthdaysToday = Array.from(uniqueClients.values()).filter(c => {
         const bdate = parseLocalYMD(c.birthDate);
         if(!bdate) return false;
         return bdate.getDate() === today.getDate() && bdate.getMonth() === today.getMonth();
     });
 
-    return { total, conceded, denied, rate, bottlenecks, birthdaysToday, workload, viewMap, stagnatedCases, upcomingDeadlines };
+    return { total, rate, birthdaysToday, workload, viewMap, stagnatedCases, upcomingDeadlines, stagnatedCount: stagnatedCases.length, upcomingDeadlinesCount: upcomingDeadlines.length };
   }, [cases]);
 
   const handleSendBirthday = (c: Case) => {
@@ -90,71 +80,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-slate-50 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+    <div className="flex flex-col h-full bg-slate-100/50">
         
         {/* Header */}
         <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center flex-shrink-0">
             <div>
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="text-blue-600" /> Painel de Gestão Estratégica
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <TrendingUp className="text-blue-600" /> Painel de Gestão
                 </h2>
                 <p className="text-slate-500 text-sm">Panorama completo do escritório</p>
             </div>
-            <button onClick={onClose} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold transition-colors text-sm">
-                Fechar Painel
+            <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-red-500 rounded-full transition-colors">
+                <X size={20} />
             </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-100/50">
+        <div className="p-6 overflow-y-auto flex-1 kanban-scroll">
             
-            {/* 1. TOP CARDS (KPIs) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Ativos</p>
-                        <p className="text-3xl font-bold text-slate-800">{stats.total}</p>
-                    </div>
-                    <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-                        <Users size={24} />
-                    </div>
-                </div>
+            <DashboardKPIs stats={stats} />
 
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Taxa de Êxito</p>
-                        <div className="flex items-baseline gap-1">
-                            <p className="text-3xl font-bold text-slate-800">{stats.rate}%</p>
-                            <span className="text-xs text-green-600 font-bold">de concessão</span>
-                        </div>
-                    </div>
-                    <div className="p-3 bg-green-50 text-green-600 rounded-lg">
-                        <CheckCircle size={24} />
-                    </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estagnados (+90d)</p>
-                        <p className={`text-3xl font-bold ${stats.stagnatedCases.length > 0 ? 'text-orange-600' : 'text-slate-800'}`}>{stats.stagnatedCases.length}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${stats.stagnatedCases.length > 0 ? 'bg-orange-50 text-orange-600' : 'bg-slate-50 text-slate-400'}`}>
-                        <Clock size={24} />
-                    </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Prazos na Semana</p>
-                        <p className={`text-3xl font-bold ${stats.upcomingDeadlines.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>{stats.upcomingDeadlines.length}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${stats.upcomingDeadlines.length > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-400'}`}>
-                        <AlertOctagon size={24} />
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. MAIN GRID */}
+            {/* MAIN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* COL 1: Workload & View Distribution */}
@@ -240,21 +185,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Stagnated List */}
-                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-80 overflow-y-auto">
+                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-80 overflow-y-auto kanban-scroll">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide sticky top-0 bg-white pb-2 border-b border-slate-50">
                                 <Clock size={16} className="text-orange-500"/> Fila de Espera (+90 dias)
                             </h3>
                             <div className="space-y-2">
                                 {stats.stagnatedCases.length === 0 ? (
                                     <div className="text-center py-10 text-slate-400 text-xs">
-                                        Nenhum processo estagnado. Ótimo trabalho!
+                                        Nenhum processo estagnado.
                                     </div>
                                 ) : (
                                     stats.stagnatedCases.map(c => (
-                                        <div key={c.id} className="flex justify-between items-center p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100 transition-colors cursor-pointer">
+                                        <div key={c.id} className="flex justify-between items-center p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100 transition-colors">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-xs font-bold text-slate-700 truncate">{c.clientName}</p>
-                                                <p className="text-[10px] text-slate-400 truncate">{VIEW_CONFIG[c.view]?.label} - {c.columnId}</p>
+                                                <p className="text-[10px] text-slate-400 truncate">{VIEW_CONFIG[c.view]?.label}</p>
                                             </div>
                                             <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded whitespace-nowrap">
                                                 {getDaysSince(c.lastUpdate)} dias
@@ -266,7 +211,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
                         </div>
 
                          {/* Birthdays TODAY */}
-                         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-80 overflow-y-auto">
+                         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-80 overflow-y-auto kanban-scroll">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide sticky top-0 bg-white pb-2 border-b border-slate-50">
                                 <Calendar size={16} className="text-pink-500"/> Aniversariantes do Dia
                             </h3>
@@ -303,9 +248,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
                 </div>
 
             </div>
-
         </div>
-      </div>
     </div>
   );
 };

@@ -86,11 +86,10 @@ export const TaskCenterModal: React.FC<TaskCenterModalProps> = ({
                       const { task, caseObj } = item;
                       const ViewIcon = VIEW_CONFIG[caseObj.view]?.icon || Briefcase;
                       const daysLeft = getDaysDiff(caseObj.deadlineEnd);
-                      const theme = VIEW_THEMES[caseObj.view] || VIEW_THEMES['ADMIN']; // Fallback safety
+                      const theme = VIEW_THEMES[caseObj.view] || VIEW_THEMES['ADMIN']; 
                       
                       return (
                           <div key={`${caseObj.id}_${task.id}`} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
-                              {/* Left Stripe based on View Theme */}
                               <div className={`absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b ${theme.bgGradient.replace('from-', 'from-slate-400 ').replace('to-', 'to-slate-500 ')}`}></div>
                               
                               <div className="pl-3 flex flex-col h-full justify-between">
@@ -124,9 +123,7 @@ export const TaskCenterModal: React.FC<TaskCenterModalProps> = ({
                                           <div 
                                               onClick={() => onToggleTask(caseObj.id, task.id)}
                                               className="mt-0.5 w-5 h-5 rounded border border-slate-300 bg-white hover:border-blue-500 hover:bg-blue-50 cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
-                                          >
-                                              {/* Checkbox simulated */}
-                                          </div>
+                                          ></div>
                                           <span className="text-sm text-slate-700 leading-snug">{task.text}</span>
                                       </div>
                                   </div>
@@ -149,24 +146,27 @@ export const TaskCenterModal: React.FC<TaskCenterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-50 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* HEADER */}
-        <div className="bg-white border-b border-slate-200 p-6 flex justify-between items-center">
+        <div className="bg-white border-b border-slate-200 p-6 flex justify-between items-center flex-shrink-0">
             <div>
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                     <CheckSquare className="text-emerald-600" /> Central de Tarefas
                 </h2>
                 <p className="text-sm text-slate-500">Gerencie suas pendências de todos os processos.</p>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 md:hidden">
+                <X size={24} />
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hidden md:block">
                 <X size={24} />
             </button>
         </div>
 
         {/* TOOLBAR */}
-        <div className="bg-white px-6 py-3 border-b border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+        <div className="bg-white px-6 py-3 border-b border-slate-200 flex flex-wrap gap-4 items-center justify-between flex-shrink-0">
             <div className="flex gap-2">
                 <button 
                     onClick={() => setFilterMode('MY_TASKS')}
@@ -195,7 +195,7 @@ export const TaskCenterModal: React.FC<TaskCenterModalProps> = ({
         </div>
 
         {/* CONTENT */}
-        <div className="flex-1 overflow-y-auto p-6 custom-scroll">
+        <div className="flex-1 overflow-y-auto p-6 kanban-scroll">
             {filteredTasks.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                     <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mb-4">
@@ -211,13 +211,9 @@ export const TaskCenterModal: React.FC<TaskCenterModalProps> = ({
                     {renderTaskGroup('Tarefas Gerais', groupedTasks.NORMAL, 'text-slate-600', CheckSquare)}
                 </>
             )}
+            {/* Footer space */}
+            <div className="h-10"></div>
         </div>
-
-        {/* FOOTER */}
-        <div className="bg-white p-4 border-t border-slate-200 text-right text-xs text-slate-400 font-medium">
-            Total de {filteredTasks.length} pendências listadas.
-        </div>
-
       </div>
     </div>
   );
