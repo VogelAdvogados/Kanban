@@ -1,8 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
-import { X, ChevronLeft, ChevronRight, Calendar, AlertCircle, Clock, CheckCircle } from 'lucide-react';
-import { Case } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, ChevronLeft, ChevronRight, Calendar, AlertCircle, Clock, CheckCircle, User } from 'lucide-react';
+import { Case, Appointment } from '../types';
 import { parseLocalYMD } from '../utils';
+import { db } from '../services/database';
 
 interface CalendarModalProps {
   cases: Case[];
@@ -11,6 +12,11 @@ interface CalendarModalProps {
 
 export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+
+  useEffect(() => {
+      db.getAppointments().then(setAppointments);
+  }, []);
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -21,8 +27,24 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) 
   const eventsByDate = useMemo(() => {
     const map: Record<number, any[]> = {};
     
+    // 1. Appointments (Purple)
+    appointments.forEach(appt => {
+        if(appt.status === 'CANCELLED') return;
+        const d = new Date(appt.date);
+        if (d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
+            const day = d.getDate();
+            if (!map[day]) map[day] = [];
+            map[day].push({ 
+                type: 'APPOINTMENT', 
+                label: `Consulta: ${appt.clientName} (${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')})`, 
+                color: 'bg-purple-500' 
+            });
+        }
+    });
+
+    // 2. Case Events
     cases.forEach(c => {
-        // 1. Deadlines
+        // Deadlines (Red)
         if (c.deadlineEnd) {
             const d = parseLocalYMD(c.deadlineEnd);
             if (d && d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
@@ -31,7 +53,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) 
                 map[day].push({ type: 'DEADLINE', label: `Prazo: ${c.clientName}`, color: 'bg-red-500' });
             }
         }
-        // 2. Pericias
+        // Pericias (Orange)
         if (c.periciaDate) {
              const d = new Date(c.periciaDate);
             if (d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
@@ -44,7 +66,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) 
                 });
             }
         }
-        // 3. DCB
+        // DCB (Yellow)
         if (c.dcbDate) {
             const d = parseLocalYMD(c.dcbDate);
             if (d && d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
@@ -55,7 +77,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) 
         }
     });
     return map;
-  }, [cases, currentDate]);
+  }, [cases, currentDate, appointments]);
 
   const changeMonth = (delta: number) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + delta, 1));
@@ -137,7 +159,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) 
                                 <div>
                                     <p className="text-sm font-bold text-slate-700">{ev.label}</p>
                                     <p className="text-xs text-slate-500 capitalize">
-                                        {ev.type === 'DEADLINE' ? 'Prazo Fatal' : ev.type === 'PERICIA' ? 'Compromisso Presencial' : 'Cessação (DCB)'}
+                                        {ev.type === 'DEADLINE' ? 'Prazo Fatal' : ev.type === 'PERICIA' ? 'Perícia' : ev.type === 'APPOINTMENT' ? 'Atendimento' : 'Cessação (DCB)'}
                                     </p>
                                 </div>
                             </div>
@@ -161,6 +183,9 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) 
                 </div>
                  <div className="flex items-center gap-2 text-xs text-slate-500">
                     <div className="w-2 h-2 rounded-full bg-yellow-500"></div> DCB
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="w-2 h-2 rounded-full bg-purple-500"></div> Consulta
                 </div>
             </div>
         </div>

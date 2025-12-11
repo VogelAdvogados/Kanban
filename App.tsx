@@ -22,6 +22,7 @@ const MobileLayout = React.lazy(() => import('./components/MobileLayout').then(m
 const GlobalSearch = React.lazy(() => import('./components/search/GlobalSearch').then(m => ({ default: m.GlobalSearch })));
 const ConfirmationModal = React.lazy(() => import('./components/ConfirmationModal').then(m => ({ default: m.ConfirmationModal })));
 const StickyNoteDialog = React.lazy(() => import('./components/StickyNoteDialog').then(m => ({ default: m.StickyNoteDialog })));
+const AppointmentDialog = React.lazy(() => import('./components/AppointmentDialog').then(m => ({ default: m.AppointmentDialog }))); // NEW
 
 type ActiveTool = 'DASHBOARD' | 'CALENDAR' | 'TASKS' | 'CLIENTS' | 'LOGS' | 'SETTINGS' | null;
 
@@ -47,7 +48,8 @@ const App: React.FC = () => {
     commonDocs, setCommonDocs, 
     agencies, setAgencies, 
     whatsAppTemplates, setWhatsAppTemplates,
-    workflowRules, setWorkflowRules, // NEW
+    workflowRules, setWorkflowRules,
+    appointments, addAppointment, cancelAppointment, // NEW
     isLoading, error
   } = useKanban();
 
@@ -86,6 +88,7 @@ const App: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [whatsAppCase, setWhatsAppCase] = useState<Case | null>(null);
   const [documentGenCase, setDocumentGenCase] = useState<Case | null>(null);
+  const [appointmentCase, setAppointmentCase] = useState<Case | null>(null); // NEW STATE
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
   const [stickyNoteState, setStickyNoteState] = useState<{ case: Case, note?: StickyNote } | null>(null);
 
@@ -115,6 +118,7 @@ const App: React.FC = () => {
           if (e.key === 'Escape') {
               setIsModalOpen(false); setIsNewCaseDialogOpen(false); setActiveTool(null);
               setIsSearchOpen(false); setWhatsAppCase(null); setDocumentGenCase(null); setStickyNoteState(null);
+              setAppointmentCase(null);
           }
           if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
               e.preventDefault();
@@ -408,6 +412,7 @@ const App: React.FC = () => {
             onCardClick={(c) => { setSelectedCase(c); setIsModalOpen(true); }}
             onWhatsApp={(c) => setWhatsAppCase(c)} onQuickCheck={handleQuickCheck} onSmartAction={handleSmartAction}
             onStickyNote={(c, note) => setStickyNoteState({ case: c, note })}
+            onSchedule={(c) => setAppointmentCase(c)} // NEW
             users={users} currentUser={currentUser} systemSettings={systemSettings} systemTags={systemTags}
           />
         </>
@@ -472,6 +477,13 @@ const App: React.FC = () => {
             <DocumentGeneratorModal 
                 data={documentGenCase} templates={documentTemplates} onClose={() => setDocumentGenCase(null)} officeData={officeData}
                 onSaveToHistory={(title, content) => updateCase(documentGenCase, `Documento gerado: ${title}.`, currentUser.name, 'Documentos')}
+            />
+        )}
+        {appointmentCase && (
+            <AppointmentDialog 
+                caseItem={appointmentCase} users={users} currentUser={currentUser} 
+                onSave={(appt) => { addAppointment(appt); updateCase(appointmentCase, `Agendamento criado: ${new Date(appt.date).toLocaleString()}`, currentUser.name, 'Agendamento'); }} 
+                onClose={() => setAppointmentCase(null)} 
             />
         )}
         {stickyNoteState && (

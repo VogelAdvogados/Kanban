@@ -1,5 +1,5 @@
 
-import { Case, User, DocumentTemplate, SystemLog, SystemTag, Notification, OfficeData, SystemSettings, INSSAgency, WhatsAppTemplate, WorkflowRule } from '../types';
+import { Case, User, DocumentTemplate, SystemLog, SystemTag, Notification, OfficeData, SystemSettings, INSSAgency, WhatsAppTemplate, WorkflowRule, Appointment } from '../types';
 import { INITIAL_CASES, DEFAULT_DOCUMENT_TEMPLATES, USERS as DEFAULT_USERS, DEFAULT_SYSTEM_TAGS, COMMON_DOCUMENTS, DEFAULT_INSS_AGENCIES, WHATSAPP_TEMPLATES as DEFAULT_WA_TEMPLATES, DEFAULT_WORKFLOW_RULES } from '../constants';
 
 // Keys for LocalStorage (acting as DB tables)
@@ -15,7 +15,8 @@ const KEYS = {
   COMMON_DOCS: 'rambo_prev_common_docs',
   AGENCIES: 'rambo_prev_agencies',
   WA_TEMPLATES: 'rambo_prev_wa_templates',
-  WORKFLOW_RULES: 'rambo_prev_workflow_rules' // NEW KEY
+  WORKFLOW_RULES: 'rambo_prev_workflow_rules',
+  APPOINTMENTS: 'rambo_prev_appointments' // NEW KEY
 };
 
 // Simulate Network Latency (0-50ms for local, higher to test spinners)
@@ -86,6 +87,32 @@ class DatabaseService {
   async saveUsers(users: User[]): Promise<void> {
     this.set(KEYS.USERS, users);
     await delay(LATENCY);
+  }
+
+  // --- APPOINTMENTS (NEW) ---
+  async getAppointments(): Promise<Appointment[]> {
+      await delay(LATENCY);
+      return this.get<Appointment[]>(KEYS.APPOINTMENTS, []);
+  }
+
+  async saveAppointment(appt: Appointment): Promise<void> {
+      const all = this.get<Appointment[]>(KEYS.APPOINTMENTS, []);
+      const exists = all.find(a => a.id === appt.id);
+      let updated;
+      if (exists) {
+          updated = all.map(a => a.id === appt.id ? appt : a);
+      } else {
+          updated = [...all, appt];
+      }
+      this.set(KEYS.APPOINTMENTS, updated);
+      await delay(LATENCY);
+  }
+
+  async deleteAppointment(id: string): Promise<void> {
+      const all = this.get<Appointment[]>(KEYS.APPOINTMENTS, []);
+      const updated = all.filter(a => a.id !== id);
+      this.set(KEYS.APPOINTMENTS, updated);
+      await delay(LATENCY);
   }
 
   // --- TEMPLATES ---

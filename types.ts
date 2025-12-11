@@ -11,6 +11,21 @@ export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'STAGNATED' | 'C
 
 export type StickyNoteColor = 'YELLOW' | 'RED' | 'BLUE' | 'GREEN';
 
+// NEW: Appointment Type
+export type AppointmentType = 'MEETING' | 'VIDEO_CALL' | 'PHONE_CALL' | 'VISIT';
+
+export interface Appointment {
+    id: string;
+    caseId: string;
+    clientName: string;
+    lawyerId: string;
+    date: string; // ISO String (Data + Hora)
+    type: AppointmentType;
+    notes?: string;
+    status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+    createdAt: string;
+}
+
 export interface StickyNote {
   id: string;
   text: string;

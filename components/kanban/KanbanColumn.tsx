@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ColumnDefinition, Case, User, SmartAction, SystemSettings, SystemTag, StickyNote } from '../../types';
 import { CaseCard } from '../CaseCard';
@@ -21,6 +20,7 @@ interface KanbanColumnProps {
   onQuickCheck: (c: Case) => void;
   onSmartAction: (c: Case, action: SmartAction) => void;
   onStickyNote: (c: Case, note?: StickyNote) => void;
+  onSchedule?: (c: Case) => void; // NEW
   users: User[];
   currentUser?: User;
   isSuggested: boolean;
@@ -69,7 +69,7 @@ const getDragFeedback = (targetColId: string, draggedCase: Case | undefined) => 
 };
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({ 
-    column, cases, activeTheme, draggedCase, onDrop, onDragStart, onDragEnd, onCardClick, recurrencyMap, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, users, currentUser, isSuggested, systemSettings, systemTags
+    column, cases, activeTheme, draggedCase, onDrop, onDragStart, onDragEnd, onCardClick, recurrencyMap, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, onSchedule, users, currentUser, isSuggested, systemSettings, systemTags
 }) => {
     
     const isZone = column.id.startsWith('zone_');
@@ -236,6 +236,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                             onQuickCheck={onQuickCheck}
                             onSmartAction={onSmartAction}
                             onStickyNote={onStickyNote}
+                            onSchedule={onSchedule}
                             users={users}
                             currentUser={currentUser}
                             systemSettings={systemSettings}

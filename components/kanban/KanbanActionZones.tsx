@@ -18,6 +18,7 @@ interface KanbanActionZonesProps {
   onQuickCheck: (c: Case) => void;
   onSmartAction: (c: Case, action: SmartAction) => void;
   onStickyNote: (c: Case, note?: StickyNote) => void;
+  onSchedule?: (c: Case) => void; // NEW
   users: User[];
   systemSettings: SystemSettings;
   systemTags: SystemTag[];
@@ -25,7 +26,7 @@ interface KanbanActionZonesProps {
 
 export const KanbanActionZones: React.FC<KanbanActionZonesProps> = ({
   zoneColumns, activeTheme, draggedCaseId, draggedCase, onDrop, onDragStart, onDragEnd,
-  onCardClick, recurrencyMap, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, users, systemSettings, systemTags
+  onCardClick, recurrencyMap, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, onSchedule, users, systemSettings, systemTags
 }) => {
   
   if (zoneColumns.length === 0) return null;
@@ -71,6 +72,7 @@ export const KanbanActionZones: React.FC<KanbanActionZonesProps> = ({
                         onQuickCheck={onQuickCheck}
                         onSmartAction={onSmartAction}
                         onStickyNote={onStickyNote}
+                        onSchedule={onSchedule}
                         users={users}
                         isSuggested={shouldPulse} // Use suggestion visual for pulse
                         systemSettings={systemSettings}

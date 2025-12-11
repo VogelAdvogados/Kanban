@@ -1,6 +1,6 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Case, ViewType, TransitionType, Task, Notification, DocumentTemplate, SystemLog, User, SystemTag, INSSAgency, WhatsAppTemplate, WorkflowRule } from '../types';
+import { Case, ViewType, TransitionType, Task, Notification, DocumentTemplate, SystemLog, User, SystemTag, INSSAgency, WhatsAppTemplate, WorkflowRule, Appointment } from '../types';
 import { COLUMNS_BY_VIEW, TRANSITION_RULES, COMMON_DOCUMENTS, DEFAULT_INSS_AGENCIES, WHATSAPP_TEMPLATES as DEFAULT_WA_TEMPLATES } from '../constants';
 import { getAutomaticUpdatesForColumn, getAge } from '../utils';
 import { db } from '../services/database';
@@ -16,6 +16,7 @@ export const useKanban = () => {
   const [agencies, setAgencies] = useState<INSSAgency[]>(DEFAULT_INSS_AGENCIES);
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<WhatsAppTemplate[]>(DEFAULT_WA_TEMPLATES);
   const [workflowRules, setWorkflowRules] = useState<WorkflowRule[]>([]); // NEW STATE
+  const [appointments, setAppointments] = useState<Appointment[]>([]); // NEW STATE
   
   // 2. Control State
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +41,7 @@ export const useKanban = () => {
     const initData = async () => {
       setIsLoading(true);
       try {
-        const [loadedCases, loadedNotifs, loadedTemplates, loadedLogs, loadedTags, loadedDocs, loadedAgencies, loadedWaTemplates, loadedWorkflow] = await Promise.all([
+        const [loadedCases, loadedNotifs, loadedTemplates, loadedLogs, loadedTags, loadedDocs, loadedAgencies, loadedWaTemplates, loadedWorkflow, loadedAppointments] = await Promise.all([
           db.getCases(),
           db.getNotifications(),
           db.getTemplates(),
@@ -49,7 +50,8 @@ export const useKanban = () => {
           db.getCommonDocs(),
           db.getAgencies(),
           db.getWhatsAppTemplates(),
-          db.getWorkflowRules()
+          db.getWorkflowRules(),
+          db.getAppointments()
         ]);
         
         setCases(loadedCases);
@@ -61,6 +63,7 @@ export const useKanban = () => {
         setAgencies(loadedAgencies);
         setWhatsAppTemplates(loadedWaTemplates);
         setWorkflowRules(loadedWorkflow);
+        setAppointments(loadedAppointments);
       } catch (err) {
         console.error("Failed to initialize system", err);
         setError("Falha ao carregar dados do sistema.");
@@ -267,6 +270,34 @@ export const useKanban = () => {
           }
       }
       return { updates: newUpdates, log: newLog };
+  };
+
+  // --- APPOINTMENTS (NEW) ---
+  const addAppointment = async (appt: Appointment) => {
+      const exists = appointments.find(a => a.id === appt.id);
+      let updatedList;
+      if (exists) {
+          updatedList = appointments.map(a => a.id === appt.id ? appt : a);
+      } else {
+          updatedList = [...appointments, appt];
+          // Also add notification for lawyer
+          addNotification(
+              'Novo Agendamento', 
+              `Cliente ${appt.clientName} agendado para ${new Date(appt.date).toLocaleDateString()} às ${new Date(appt.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}.`,
+              'INFO',
+              appt.caseId,
+              appt.lawyerId
+          );
+      }
+      setAppointments(updatedList);
+      await db.saveAppointment(appt);
+  };
+
+  const cancelAppointment = async (id: string) => {
+      const updated = appointments.map(a => a.id === id ? { ...a, status: 'CANCELLED' as const } : a);
+      setAppointments(updated);
+      const target = appointments.find(a => a.id === id);
+      if (target) await db.saveAppointment({ ...target, status: 'CANCELLED' });
   };
 
   // --- CRUD ACTIONS (ASYNC) ---
@@ -509,7 +540,8 @@ export const useKanban = () => {
       commonDocs, setCommonDocs: updateCommonDocs, 
       agencies, setAgencies: updateAgencies,
       whatsAppTemplates, setWhatsAppTemplates: updateWhatsAppTemplates,
-      workflowRules, setWorkflowRules: updateWorkflowRules, // EXPORT NEW HOOK
+      workflowRules, setWorkflowRules: updateWorkflowRules,
+      appointments, addAppointment, cancelAppointment, // EXPORT NEW
       isLoading, isSaving, error
   };
 };

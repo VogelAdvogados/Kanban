@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Clock, MessageCircle, Check, Key, HeartPulse, UserCheck, TrendingUp, AlertOctagon, Siren, Plus, FileText, Search, ExternalLink, RefreshCw, AlertTriangle, Eye, Activity } from 'lucide-react';
+import { Clock, MessageCircle, Check, Key, HeartPulse, UserCheck, TrendingUp, AlertOctagon, Siren, Plus, FileText, Search, ExternalLink, RefreshCw, AlertTriangle, Eye, Activity, CalendarPlus, CreditCard } from 'lucide-react';
 import { Case, User as UserType, SmartAction, SystemSettings, SystemTag, StickyNote } from '../types';
 import { getAge, getDaysDiff, formatDate, analyzeCaseHealth, getSuccessProbability, getDaysSince, parseLocalYMD } from '../utils';
 import { BENEFIT_OPTIONS, SUGGESTED_ACTIONS, SMART_ACTIONS_CONFIG } from '../constants';
@@ -16,6 +16,7 @@ interface CaseCardProps {
   onQuickCheck?: (c: Case) => void;
   onSmartAction?: (c: Case, action: SmartAction) => void;
   onStickyNote?: (c: Case, note?: StickyNote) => void; 
+  onSchedule?: (c: Case) => void; // NEW
   users: UserType[];
   currentUser?: UserType; 
   isDragging?: boolean;
@@ -24,7 +25,7 @@ interface CaseCardProps {
 }
 
 export const CaseCard: React.FC<CaseCardProps> = React.memo(({ 
-    data, recurrentCount = 0, onClick, onDragStart, onDragEnd, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, users, currentUser, isDragging = false, systemSettings, systemTags = [] 
+    data, recurrentCount = 0, onClick, onDragStart, onDragEnd, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, onSchedule, users, currentUser, isDragging = false, systemSettings, systemTags = [] 
 }) => {
   const [copied, setCopied] = useState<string | null>(null);
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
@@ -473,6 +474,16 @@ export const CaseCard: React.FC<CaseCardProps> = React.memo(({
             {/* FOOTER ACTIONS - ALWAYS VISIBLE */}
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
                 <div className="flex gap-1.5">
+                    {/* CPF BUTTON (Restored/Added) */}
+                    <button 
+                        onClick={(e) => handleAction(e, () => copyToClipboard(data.cpf, 'cpf'))}
+                        className={`flex items-center gap-1 px-1.5 py-1 rounded border transition-all ${copied === 'cpf' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700'}`}
+                        title="Copiar CPF"
+                    >
+                        <CreditCard size={10}/> <span className="text-[9px] font-bold">CPF</span> {copied === 'cpf' && <Check size={8}/>}
+                    </button>
+
+                    {/* GOV BUTTON */}
                     {data.govPassword && (
                         <button 
                             onClick={(e) => handleAction(e, () => copyToClipboard(data.govPassword, 'gov'))} 
@@ -482,13 +493,17 @@ export const CaseCard: React.FC<CaseCardProps> = React.memo(({
                             <Key size={10}/> <span className="text-[9px] font-bold">Gov</span> {copied === 'gov' && <Check size={8}/>}
                         </button>
                     )}
-                    <button 
-                        onClick={(e) => handleAction(e, () => copyToClipboard(data.cpf, 'cpf'))} 
-                        className={`flex items-center gap-1 px-1.5 py-1 rounded border transition-all ${copied === 'cpf' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'}`}
-                        title="Copiar CPF"
-                    >
-                        <FileText size={10}/> <span className="text-[9px] font-bold">CPF</span> {copied === 'cpf' && <Check size={8}/>}
-                    </button>
+
+                    {/* SCHEDULE BUTTON */}
+                    {onSchedule && (
+                        <button 
+                            onClick={(e) => handleAction(e, () => onSchedule(data))}
+                            className="flex items-center gap-1 px-1.5 py-1 rounded border bg-white text-slate-500 border-slate-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200 transition-all"
+                            title="Agendar Atendimento"
+                        >
+                            <CalendarPlus size={10}/> <span className="text-[9px] font-bold">Agendar</span>
+                        </button>
+                    )}
                 </div>
                 
                 <div className="flex gap-1.5">

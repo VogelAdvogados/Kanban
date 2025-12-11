@@ -21,6 +21,7 @@ interface KanbanBoardProps {
   onQuickCheck: (c: Case) => void;
   onSmartAction: (c: Case, action: SmartAction) => void;
   onStickyNote: (c: Case, note?: StickyNote) => void;
+  onSchedule?: (c: Case) => void; // NEW
   users: User[]; 
   currentUser?: User;
   systemSettings: SystemSettings;
@@ -28,7 +29,7 @@ interface KanbanBoardProps {
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
-  cases, currentView, columns, casesByColumn, recurrencyMap, draggedCaseId, onDrop, onDragStart, onDragEnd, onCardClick, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, users, currentUser, systemSettings, systemTags
+  cases, currentView, columns, casesByColumn, recurrencyMap, draggedCaseId, onDrop, onDragStart, onDragEnd, onCardClick, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, onSchedule, users, currentUser, systemSettings, systemTags
 }) => {
   const activeTheme = VIEW_THEMES[currentView];
   const standardColumns = columns.filter(c => !c.id.startsWith('zone_'));
@@ -77,6 +78,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         onQuickCheck={onQuickCheck}
                         onSmartAction={onSmartAction}
                         onStickyNote={onStickyNote}
+                        onSchedule={onSchedule}
                         users={users}
                         currentUser={currentUser}
                         isSuggested={suggestedColId === column.id}
@@ -102,6 +104,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             onQuickCheck={onQuickCheck}
             onSmartAction={onSmartAction}
             onStickyNote={onStickyNote}
+            onSchedule={onSchedule}
             users={users}
             systemSettings={systemSettings}
             systemTags={systemTags}
