@@ -1,19 +1,50 @@
 
 import { LucideIcon } from 'lucide-react';
 
-export type ViewType = 'ADMIN' | 'AUX_DOENCA' | 'RECURSO_ADM' | 'JUDICIAL' | 'MESA_DECISAO';
+export type ViewType = 'ADMIN' | 'AUX_DOENCA' | 'RECURSO_ADM' | 'JUDICIAL' | 'MESA_DECISAO' | 'ARCHIVED';
 
 export type UrgencyLevel = 'NORMAL' | 'HIGH' | 'CRITICAL';
 
-export type TransitionType = 'PROTOCOL_INSS' | 'PROTOCOL_APPEAL' | 'DEADLINE' | 'CONCLUSION_NB' | 'PENDENCY';
+export type TransitionType = 'PROTOCOL_INSS' | 'PROTOCOL_APPEAL' | 'DEADLINE' | 'CONCLUSION_NB' | 'PENDENCY' | 'APPEAL_RETURN';
+
+export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'STAGNATED' | 'COBWEB';
+
+export type StickyNoteColor = 'YELLOW' | 'RED' | 'BLUE' | 'GREEN';
+
+export interface StickyNote {
+  id: string;
+  text: string;
+  color: StickyNoteColor;
+  authorId: string;
+  authorName: string;
+  targetId: string | 'SELF' | null; // null = Everyone
+  createdAt: string;
+}
 
 export interface ThemeConfig {
-    bgGradient: string; // Background class for the main app
-    primary: string; // Text color class (e.g. text-blue-600)
-    secondary: string; // Lighter text/bg
-    accent: string; // Border/Ring colors
-    button: string; // Active button bg
+    bgGradient: string; 
+    primary: string; 
+    secondary: string; 
+    accent: string; 
+    button: string; 
     iconColor: string;
+}
+
+// NEW: INSS Agency Model
+export interface INSSAgency {
+    id: string;
+    name: string; // Ex: Agência INSS - CRUZ ALTA
+    address: string; // Ex: Rua Voluntários da Pátria, 123, Centro
+}
+
+// NEW: Global Settings for SLAs and Automation
+export interface SystemSettings {
+    sla_internal_analysis: number; // Max days for internal tasks (Triagem, Montagem)
+    sla_client_contact: number;    // Max days without talking to client
+    sla_stagnation: number;        // Days before a case is considered "Stagnated" in external phases
+    sla_spider_web: number;        // NEW: Days without manual log/check to show spider web
+    pp_alert_days: number;         // NEW: Days before DCB to alert for Extension (PP)
+    show_probabilities: boolean;   // Toggle AI Probability Badge
 }
 
 export interface OfficeData {
@@ -24,7 +55,21 @@ export interface OfficeData {
   phone?: string;
   email?: string;
   website?: string;
-  logo?: string; // Base64 or URL
+  logo?: string; 
+}
+
+// NEW: Smart Tag Rules
+export interface AutoTagRule {
+    type: 'BENEFIT_TYPE' | 'AGE_GREATER' | 'COLUMN_CONTAINS';
+    value: string | number;
+}
+
+export interface SystemTag {
+  id: string;
+  label: string;
+  colorBg: string;
+  colorText: string;
+  rules?: AutoTagRule[]; // Automation Rules
 }
 
 export interface TransitionRule {
@@ -32,6 +77,36 @@ export interface TransitionRule {
   to: string;
   type: TransitionType;
 }
+
+// --- WORKFLOW ENGINE TYPES ---
+export type WorkflowTrigger = 'COLUMN_ENTER';
+
+export type WorkflowConditionType = 'TAG_CONTAINS' | 'BENEFIT_TYPE' | 'FIELD_EMPTY' | 'FIELD_NOT_EMPTY' | 'URGENCY_IS';
+
+export type WorkflowActionType = 'ADD_TASK' | 'SET_RESPONSIBLE' | 'BLOCK_MOVE' | 'SET_URGENCY' | 'ADD_TAG' | 'SEND_NOTIFICATION';
+
+export interface WorkflowCondition {
+    id: string;
+    type: WorkflowConditionType;
+    value?: string; // e.g. Tag Name, Benefit Code, or Field Name
+}
+
+export interface WorkflowAction {
+    id: string;
+    type: WorkflowActionType;
+    payload?: any; // Task text, User ID, or Error Message for Block
+}
+
+export interface WorkflowRule {
+    id: string;
+    name: string;
+    isActive: boolean;
+    trigger: WorkflowTrigger;
+    targetColumnId: string; // The column that triggers the rule
+    conditions: WorkflowCondition[];
+    actions: WorkflowAction[];
+}
+// -----------------------------
 
 export interface WhatsAppTemplate {
   id: string;
@@ -44,7 +119,7 @@ export interface DocumentTemplate {
   id: string;
   title: string;
   category: 'PROCURACAO' | 'CONTRATO' | 'DECLARACAO' | 'REQUERIMENTO' | 'OUTROS';
-  content: string; // HTML/Rich text or Markdown content with placeholders
+  content: string; 
   lastModified: string;
 }
 
@@ -53,10 +128,11 @@ export interface SmartAction {
   targetView: ViewType;
   targetColumnId: string;
   urgency?: UrgencyLevel;
-  icon?: any; // LucideIcon
-  colorClass: string; // e.g., 'bg-blue-600 text-white'
+  icon?: any; 
+  colorClass: string; 
   requireConfirmation?: boolean;
-  tasksToAdd?: Task[]; // Tarefas a injetar automaticamente
+  tasksToAdd?: Task[]; 
+  url?: string; // New: Support for direct links
 }
 
 export interface CaseHistory {
@@ -65,16 +141,16 @@ export interface CaseHistory {
   user: string;
   action: string;
   details?: string;
+  isContact?: boolean; // New: Marks if this history item was a contact with client
 }
 
-// NEW: Global System Logs for Audit (User management, Template changes, etc.)
 export interface SystemLog {
   id: string;
   date: string;
   user: string;
   action: string;
   details: string;
-  category: 'SYSTEM' | 'SECURITY' | 'TEMPLATE' | 'USER_MANAGEMENT';
+  category: 'SYSTEM' | 'SECURITY' | 'TEMPLATE' | 'USER_MANAGEMENT' | 'WORKFLOW';
 }
 
 export interface Task {
@@ -86,9 +162,11 @@ export interface Task {
 export interface CaseFile {
   id: string;
   name: string;
-  type: string; // MIME type e.g. 'application/pdf'
-  size: number; // bytes
+  type: string; 
+  size: number; 
   uploadDate: string;
+  category?: string; // TIPO DE DOCUMENTO (RG, CPF, PROCURAÇÃO...)
+  url?: string; // Para download real
 }
 
 export interface Notification {
@@ -98,14 +176,14 @@ export interface Notification {
   description: string;
   timestamp: string;
   isRead: boolean;
-  caseId?: string; // Link to open the case
-  recipientId?: string; // ID do usuário destino. Se undefined, é global.
+  caseId?: string; 
+  recipientId?: string; 
 }
 
 export interface MandadoSeguranca {
   id: string;
-  npu: string; // Número do Processo
-  filingDate: string; // Data da Impetração
+  npu: string; 
+  filingDate: string; 
   reason: 'DEMORA_ANALISE' | 'DEMORA_RECURSO' | 'OUTROS';
   status: 'AGUARDANDO' | 'LIMINAR_DEFERIDA' | 'LIMINAR_INDEFERIDA' | 'SENTENCA';
   notes?: string;
@@ -113,14 +191,13 @@ export interface MandadoSeguranca {
 
 export interface Case {
   id: string;
-  internalId: string; // Ex: 2024.001 (Gerado na entrada)
+  internalId: string; 
   
   clientName: string;
   cpf: string;
   phone: string;
-  birthDate?: string; // YYYY-MM-DD
+  birthDate?: string; 
   
-  // Extended Client Info
   rg?: string;
   pis?: string;
   motherName?: string;
@@ -133,74 +210,93 @@ export interface Case {
   addressCity?: string;
   addressState?: string;
 
-  // Specific Benefit Type Code (e.g., 41, 87)
   benefitType?: string;
 
-  // Access Credentials
   govPassword?: string;
   
-  // Status tracking
   view: ViewType;
-  columnId: string; // The current step in the specific view
+  columnId: string; 
   
-  // Responsibility
   responsibleId: string;
-  responsibleName: string; // Display name (e.g., "Dr. Silva")
+  responsibleName: string; 
   
-  // Tasks / Checklist
   tasks?: Task[];
 
-  // Files / Attachments
   files?: CaseFile[];
 
-  // Missing Docs (Pendências)
   missingDocs?: string[];
 
-  // Tags (Labels) - NEW
   tags?: string[];
+  
+  stickyNotes?: StickyNote[];
 
-  // Dates
   createdAt: string;
-  lastUpdate: string; // Quando mudou de fase
-  lastCheckedAt?: string; // Quando foi verificado pela última vez (sem mudar de fase)
-  deadline?: string; // Generic deadline
+  lastUpdate: string; 
+  lastCheckedAt?: string; 
+  lastContactDate?: string; 
+  deadline?: string; 
   
-  // --- IDENTIFIERS ACCUMULATION ---
-  protocolNumber?: string; // Protocolo INSS
-  protocolDate?: string; // YYYY-MM-DD
+  protocolNumber?: string; 
+  protocolDate?: string; 
   
-  benefitNumber?: string; // NB (Número do Benefício) - Gerado na Conclusão
-  benefitDate?: string; // Data da Concessão/Decisão
+  exigencyDetails?: string; // NOVO: O que o INSS pediu na exigência?
+
+  benefitNumber?: string; 
+  benefitDate?: string; 
   
-  // --- RECURSO ADM ---
-  appealProtocolNumber?: string; // Protocolo do Recurso
+  // Legacy / Generic Appeal Fields
+  appealProtocolNumber?: string; 
   appealProtocolDate?: string;
-  appealDecisionDate?: string; // Data do Julgamento do Recurso
+  appealDecisionDate?: string; 
   appealOutcome?: 'PROVIDO' | 'IMPROVIDO' | 'PARCIAL' | 'ANULADO';
 
-  // --- MANDADO DE SEGURANÇA (LISTA) ---
+  // Specific 1st Instance (Junta)
+  appealOrdinarioProtocol?: string;
+  appealOrdinarioDate?: string;
+  appealOrdinarioStatus?: 'AGUARDANDO' | 'PROVIDO' | 'IMPROVIDO' | 'EXIGENCIA';
+
+  // Specific 2nd Instance (Câmara/CAJ)
+  appealEspecialProtocol?: string;
+  appealEspecialDate?: string;
+  appealEspecialStatus?: 'AGUARDANDO' | 'PROVIDO' | 'IMPROVIDO' | 'BAIXADO';
+
   mandadosSeguranca?: MandadoSeguranca[];
 
-  // --- DEADLINES ---
-  deadlineStart?: string; // YYYY-MM-DD (Inicio do Prazo)
-  deadlineEnd?: string; // YYYY-MM-DD (Fim do Prazo)
+  deadlineStart?: string; 
+  deadlineEnd?: string; 
 
-  // Specific Auxílio-Doença Dates
-  periciaDate?: string; // Data da Perícia Médica agendada
-  dcbDate?: string; // Data da Cessação do Benefício (DCB)
+  // Module Auxilio-Doença (Incapacidade)
+  periciaDate?: string;
+  periciaTime?: string; // NEW
+  periciaLocation?: string; // NEW
+  strategyType?: 'ATESTMED' | 'PRESENCIAL'; // NEW
   
-  // Flags
+  // Module Pensão (Death)
+  deceasedName?: string; // Nome do Instituidor
+  deceasedDate?: string; // Data do Óbito
+  
+  // Module Tempo/Rural
+  contributionTimeYears?: number; // Tempo apurado (Anos)
+  contributionTimeMonths?: number; // Tempo apurado (Meses)
+  ruralProofStart?: string; // Data início prova rural
+
+  dcbDate?: string; 
+  
+  referral?: string; // Indicação
+
   urgency: UrgencyLevel;
-  isExtension?: boolean; // Se é um pedido de prorrogação
+  isExtension?: boolean;
   
-  // History
+  // NEW: Manual Confidence Rating (0-5)
+  confidenceRating?: number;
+  
   history: CaseHistory[];
 }
 
 export interface ColumnDefinition {
   id: string;
   title: string;
-  color: string; // Tailwind border color class
+  color: string; 
 }
 
 export interface User {
@@ -208,5 +304,5 @@ export interface User {
   name: string;
   avatarInitials: string;
   role: 'ADMIN' | 'LAWYER' | 'SECRETARY' | 'FINANCIAL';
-  color?: string; // Hex color for avatar identity
+  color?: string; 
 }

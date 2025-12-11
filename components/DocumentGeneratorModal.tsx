@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, FileText, Printer, ChevronLeft, PenTool,
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  List, ListOrdered, Undo, Redo, RefreshCcw, Eye, AlertTriangle, FileSignature, Scale, ArrowRight, Table, Image as ImageIcon, ChevronDown, Plus, Trash2
+  List, ListOrdered, Undo, Redo, RefreshCcw, Eye, AlertTriangle, FileSignature, Scale, ArrowRight, Table, Image as ImageIcon, ChevronDown, Plus, Trash2, History
 } from 'lucide-react';
 import { Case, DocumentTemplate, OfficeData } from '../types';
 import { formatDate } from '../utils';
@@ -13,6 +13,7 @@ interface DocumentGeneratorModalProps {
   templates: DocumentTemplate[];
   onClose: () => void;
   officeData?: OfficeData;
+  onSaveToHistory?: (docTitle: string, content: string) => void;
 }
 
 // Map icons to categories
@@ -25,7 +26,7 @@ const CategoryIcon = ({ category }: { category: string }) => {
     }
 };
 
-export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ data, templates, onClose, officeData }) => {
+export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ data, templates, onClose, officeData, onSaveToHistory }) => {
   const [step, setStep] = useState<'SELECT' | 'PREVIEW'>('SELECT');
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null);
   const [showPlaceholders, setShowPlaceholders] = useState(true);
@@ -210,6 +211,8 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
           };
           reader.readAsDataURL(file);
       }
+      // RESET INPUT so same file can be selected again
+      if (e.target) e.target.value = '';
       setShowImageMenu(false);
   };
 
@@ -260,6 +263,21 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
               printWindow.print();
           }, 500);
       }
+  };
+
+  const handleSaveToHistory = () => {
+      if(onSaveToHistory && selectedTemplate && editorRef.current) {
+          // Strip placeholders background for saving
+          const content = editorRef.current.innerHTML.replace(/bg-yellow-100.*?"/g, '"').replace(/\[FALTA:.*?\]/g, '');
+          onSaveToHistory(selectedTemplate.title, `Conteúdo gerado: ${content.substring(0, 100)}...`);
+          alert('Documento salvo no histórico do caso com sucesso!');
+      }
+  };
+
+  // Helper for menu buttons to prevent focus loss
+  const preventFocusLoss = (fn: () => void) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      fn();
   };
 
   return (
@@ -343,8 +361,8 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
 
                     {/* Center: Formatting (Collapsed for cleaner UI) */}
                     <div className="hidden lg:flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                        <button onClick={() => execCmd('undo')} className="p-1 hover:bg-slate-200 rounded text-slate-600"><Undo size={14}/></button>
-                        <button onClick={() => execCmd('redo')} className="p-1 hover:bg-slate-200 rounded text-slate-600"><Redo size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('undo'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><Undo size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('redo'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><Redo size={14}/></button>
                         
                         <div className="w-px h-4 bg-slate-300 mx-1"></div>
 
@@ -367,40 +385,40 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
 
                         <div className="w-px h-4 bg-slate-300 mx-1"></div>
 
-                        <button onClick={() => execCmd('bold')} className="p-1 hover:bg-slate-200 rounded text-slate-700 font-bold"><Bold size={14}/></button>
-                        <button onClick={() => execCmd('italic')} className="p-1 hover:bg-slate-200 rounded text-slate-700 italic"><Italic size={14}/></button>
-                        <button onClick={() => execCmd('underline')} className="p-1 hover:bg-slate-200 rounded text-slate-700 underline"><Underline size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('bold'))} className="p-1 hover:bg-slate-200 rounded text-slate-700 font-bold"><Bold size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('italic'))} className="p-1 hover:bg-slate-200 rounded text-slate-700 italic"><Italic size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('underline'))} className="p-1 hover:bg-slate-200 rounded text-slate-700 underline"><Underline size={14}/></button>
                         
                         <div className="w-px h-4 bg-slate-300 mx-1"></div>
 
-                        <button onClick={() => execCmd('justifyLeft')} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignLeft size={14}/></button>
-                        <button onClick={() => execCmd('justifyCenter')} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignCenter size={14}/></button>
-                        <button onClick={() => execCmd('justifyRight')} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignRight size={14}/></button>
-                        <button onClick={() => execCmd('justifyFull')} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignJustify size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyLeft'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignLeft size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyCenter'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignCenter size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyRight'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignRight size={14}/></button>
+                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyFull'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignJustify size={14}/></button>
 
                         <div className="w-px h-4 bg-slate-300 mx-1"></div>
                         
                         {/* TABLE MENU */}
                         <div className="relative">
-                            <button onClick={() => setShowTableMenu(!showTableMenu)} className="p-1 hover:bg-slate-200 rounded text-slate-600 flex items-center gap-1" title="Tabela">
+                            <button onMouseDown={preventFocusLoss(() => setShowTableMenu(!showTableMenu))} className="p-1 hover:bg-slate-200 rounded text-slate-600 flex items-center gap-1" title="Tabela">
                                 <Table size={14}/> <ChevronDown size={10}/>
                             </button>
                             {showTableMenu && (
                                 <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-lg p-1 z-50 w-40 flex flex-col gap-1">
-                                    <button onClick={insertTable} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">Inserir Tabela</button>
+                                    <button onMouseDown={preventFocusLoss(insertTable)} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">Inserir Tabela</button>
                                     <div className="h-px bg-slate-100 my-0.5"></div>
-                                    <button onClick={() => modifyTable('addRow')} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">+ Linha</button>
-                                    <button onClick={() => modifyTable('addCol')} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">+ Coluna</button>
+                                    <button onMouseDown={preventFocusLoss(() => modifyTable('addRow'))} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">+ Linha</button>
+                                    <button onMouseDown={preventFocusLoss(() => modifyTable('addCol'))} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">+ Coluna</button>
                                     <div className="h-px bg-slate-100 my-0.5"></div>
-                                    <button onClick={() => modifyTable('delRow')} className="text-xs text-left px-2 py-1.5 hover:bg-red-50 text-red-600 rounded">Remover Linha</button>
-                                    <button onClick={() => modifyTable('delCol')} className="text-xs text-left px-2 py-1.5 hover:bg-red-50 text-red-600 rounded">Remover Coluna</button>
+                                    <button onMouseDown={preventFocusLoss(() => modifyTable('delRow'))} className="text-xs text-left px-2 py-1.5 hover:bg-red-50 text-red-600 rounded">Remover Linha</button>
+                                    <button onMouseDown={preventFocusLoss(() => modifyTable('delCol'))} className="text-xs text-left px-2 py-1.5 hover:bg-red-50 text-red-600 rounded">Remover Coluna</button>
                                 </div>
                             )}
                         </div>
 
                          {/* IMAGE MENU */}
                          <div className="relative">
-                            <button onClick={() => setShowImageMenu(!showImageMenu)} className="p-1 hover:bg-slate-200 rounded text-slate-600 flex items-center gap-1" title="Imagem">
+                            <button onMouseDown={preventFocusLoss(() => setShowImageMenu(!showImageMenu))} className="p-1 hover:bg-slate-200 rounded text-slate-600 flex items-center gap-1" title="Imagem">
                                 <ImageIcon size={14}/> <ChevronDown size={10}/>
                             </button>
                             {showImageMenu && (
@@ -409,11 +427,11 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
                                         Upload Imagem...
                                         <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} ref={fileInputRef} />
                                     </label>
-                                    <button onClick={insertImageUrl} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">Imagem via URL</button>
+                                    <button onMouseDown={preventFocusLoss(insertImageUrl)} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">Imagem via URL</button>
                                     {officeData?.logo && (
                                         <>
                                             <div className="h-px bg-slate-100 my-0.5"></div>
-                                            <button onClick={insertLogo} className="text-xs text-left px-2 py-1.5 hover:bg-blue-50 text-blue-600 rounded font-bold">Inserir Logo</button>
+                                            <button onMouseDown={preventFocusLoss(insertLogo)} className="text-xs text-left px-2 py-1.5 hover:bg-blue-50 text-blue-600 rounded font-bold">Inserir Logo</button>
                                         </>
                                     )}
                                 </div>
@@ -421,13 +439,22 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
                         </div>
                     </div>
 
-                    {/* Right: Print Action */}
-                    <div>
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-2">
+                        {onSaveToHistory && (
+                            <button 
+                                onClick={handleSaveToHistory}
+                                className="px-3 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs font-bold transition-all"
+                                title="Salvar um registro deste documento no histórico do processo"
+                            >
+                                <History size={14}/> Salvar no Histórico
+                            </button>
+                        )}
                         <button 
                             onClick={handlePrint} 
                             className="px-6 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 text-sm font-bold hover:bg-blue-700 shadow-md transition-transform active:scale-95"
                         >
-                            <Printer size={16}/> IMPRIMIR DOCUMENTO
+                            <Printer size={16}/> IMPRIMIR
                         </button>
                     </div>
                 </div>

@@ -1,7 +1,6 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { Hash, CheckCircle, XCircle, HelpCircle, FileText, Briefcase, Calculator } from 'lucide-react';
+import { Hash, CheckCircle, XCircle, HelpCircle, FileText, Briefcase, Calculator, PieChart, Split, ArrowRight } from 'lucide-react';
 import { Case } from '../../types';
 import { parseLocalYMD, formatBenefitNumber } from '../../utils';
 
@@ -14,9 +13,9 @@ interface ConclusionFormProps {
 export const ConclusionForm: React.FC<ConclusionFormProps> = ({ data, caseContext, onChange }) => {
   const [showDcbOverride, setShowDcbOverride] = useState(false);
 
-  // Auto-calculate deadline if DENIED is selected
+  // Auto-calculate deadline if DENIED or PARTIAL is selected
   useEffect(() => {
-    if (data.outcome === 'DENIED' && data.benefitDate) {
+    if ((data.outcome === 'DENIED' || data.outcome === 'PARTIAL') && data.benefitDate) {
       const decisionDate = parseLocalYMD(data.benefitDate);
       if (decisionDate) {
         const deadline = new Date(decisionDate);
@@ -70,20 +69,29 @@ export const ConclusionForm: React.FC<ConclusionFormProps> = ({ data, caseContex
       {/* 2. Seletor de Resultado */}
       <div>
         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Resultado da Análise</label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => onChange({ outcome: 'GRANTED' })}
-            className={`p-3 rounded-lg border flex flex-col items-center justify-center gap-2 transition-all ${data.outcome === 'GRANTED' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm ring-1 ring-emerald-200' : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50/50'}`}
+            className={`p-2 rounded-lg border flex flex-col items-center justify-center gap-1 transition-all ${data.outcome === 'GRANTED' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm ring-1 ring-emerald-200' : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50/50'}`}
           >
-            <CheckCircle size={20} className={data.outcome === 'GRANTED' ? 'text-emerald-600' : 'text-slate-300'} />
-            <span className="text-xs font-bold uppercase">Concedido</span>
+            <CheckCircle size={18} className={data.outcome === 'GRANTED' ? 'text-emerald-600' : 'text-slate-300'} />
+            <span className="text-[10px] font-bold uppercase">Concedido</span>
           </button>
+          
+          <button
+            onClick={() => onChange({ outcome: 'PARTIAL' })}
+            className={`p-2 rounded-lg border flex flex-col items-center justify-center gap-1 transition-all ${data.outcome === 'PARTIAL' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50/50'}`}
+          >
+            <Split size={18} className={data.outcome === 'PARTIAL' ? 'text-blue-600' : 'text-slate-300'} />
+            <span className="text-[10px] font-bold uppercase">Parcial</span>
+          </button>
+
           <button
             onClick={() => onChange({ outcome: 'DENIED' })}
-            className={`p-3 rounded-lg border flex flex-col items-center justify-center gap-2 transition-all ${data.outcome === 'DENIED' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm ring-1 ring-red-200' : 'bg-white border-slate-200 text-slate-500 hover:border-red-300 hover:bg-red-50/50'}`}
+            className={`p-2 rounded-lg border flex flex-col items-center justify-center gap-1 transition-all ${data.outcome === 'DENIED' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm ring-1 ring-red-200' : 'bg-white border-slate-200 text-slate-500 hover:border-red-300 hover:bg-red-50/50'}`}
           >
-            <XCircle size={20} className={data.outcome === 'DENIED' ? 'text-red-600' : 'text-slate-300'} />
-            <span className="text-xs font-bold uppercase">Indeferido</span>
+            <XCircle size={18} className={data.outcome === 'DENIED' ? 'text-red-600' : 'text-slate-300'} />
+            <span className="text-[10px] font-bold uppercase">Indeferido</span>
           </button>
         </div>
       </div>
@@ -126,24 +134,51 @@ export const ConclusionForm: React.FC<ConclusionFormProps> = ({ data, caseContex
               </div>
             )}
           </div>
-          
-          <div className="pt-2 border-t border-emerald-100">
-            <p className="text-[10px] font-bold text-emerald-800 uppercase mb-2">Próximos Passos Sugeridos:</p>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-white border border-emerald-200 p-2 rounded text-center text-xs text-emerald-700">
-                Conferir Cálculos
-              </div>
-              <div className="flex-1 bg-white border border-emerald-200 p-2 rounded text-center text-xs text-emerald-700">
-                Arquivar / Financeiro
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
-      {/* 4. Lógica Condicional: Indeferido */}
+      {/* 4. Lógica de CISÃO DO CASO (Parcial) - MÓDULO 3 */}
+      {data.outcome === 'PARTIAL' && (
+          <div className="animate-in slide-in-from-top-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-start gap-2 mb-3">
+                  <Split className="text-blue-600 mt-1" size={20} />
+                  <div>
+                      <h4 className="text-sm font-bold text-blue-800">Cisão do Processo (Split)</h4>
+                      <p className="text-xs text-blue-700">
+                          O sistema irá dividir este caso em dois caminhos simultâneos:
+                      </p>
+                  </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white p-2 rounded border border-emerald-200">
+                      <span className="font-bold text-emerald-700 block mb-1">Processo A (Financeiro)</span>
+                      <p className="text-slate-600">Segue para <strong>Pagamento</strong> com o benefício concedido.</p>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-indigo-200">
+                      <span className="font-bold text-indigo-700 block mb-1">Processo B (Recursal)</span>
+                      <p className="text-slate-600">Cria um novo card em <strong>Recurso Adm.</strong> para a parte negada.</p>
+                  </div>
+              </div>
+
+              <div className="mt-3 pt-2 border-t border-blue-200">
+                  <label className="block text-[10px] font-bold text-blue-800 uppercase mb-1">Prazo Recursal (Novo Processo)</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-blue-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    value={data.deadlineEnd || ''}
+                    onChange={e => onChange({ deadlineEnd: e.target.value })}
+                  />
+              </div>
+          </div>
+      )}
+
+      {/* 5. Lógica Indeferido */}
       {data.outcome === 'DENIED' && (
         <div className="animate-in slide-in-from-top-2 space-y-3 bg-red-50/50 p-3 rounded-lg border border-red-100">
+          <h4 className="text-xs font-bold text-red-800 flex items-center gap-1">
+             <Briefcase size={12}/> Benefício Negado
+          </h4>
           {data.deadlineEnd && (
             <div className="flex items-start gap-2 bg-white p-2 rounded border border-red-200">
               <Calculator size={16} className="text-red-500 mt-0.5"/>
@@ -155,18 +190,6 @@ export const ConclusionForm: React.FC<ConclusionFormProps> = ({ data, caseContex
               </div>
             </div>
           )}
-          
-          <div className="pt-2 border-t border-red-200">
-            <p className="text-[10px] font-bold text-red-800 uppercase mb-2">Próximos Passos:</p>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-white border border-indigo-200 p-2 rounded text-center text-xs text-indigo-700 font-bold flex items-center justify-center gap-1">
-                <FileText size={12}/> Recurso Adm.
-              </div>
-              <div className="flex-1 bg-white border border-purple-200 p-2 rounded text-center text-xs text-purple-700 font-bold flex items-center justify-center gap-1">
-                <Briefcase size={12}/> Judicial
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>

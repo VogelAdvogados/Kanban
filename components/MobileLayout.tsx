@@ -1,6 +1,7 @@
 
+
 import React, { useState } from 'react';
-import { ViewType, Case, User, ColumnDefinition } from '../types';
+import { ViewType, Case, User, ColumnDefinition, SystemSettings, SystemTag, StickyNote } from '../types';
 import { VIEW_CONFIG, VIEW_THEMES } from '../constants';
 import { CaseCard } from './CaseCard';
 import { Search, Menu, Plus, Calendar, CheckSquare, BarChart2, Bell, Filter } from 'lucide-react';
@@ -23,6 +24,9 @@ interface MobileLayoutProps {
   onLogout: () => void;
   users: User[];
   notificationsCount: number;
+  systemSettings: SystemSettings;
+  systemTags?: SystemTag[];
+  onStickyNote?: (c: Case, note?: StickyNote) => void;
 }
 
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
@@ -30,7 +34,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   cases, filteredCases, columns, searchTerm, setSearchTerm,
   onSelectCase, onNewCase,
   onOpenDashboard, onOpenCalendar, onOpenTasks, onLogout,
-  users, notificationsCount
+  users, notificationsCount, systemSettings, systemTags, onStickyNote
 }) => {
   const activeTheme = VIEW_THEMES[currentView];
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -130,8 +134,12 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
                                 onClick={() => onSelectCase(c)}
                                 onDragStart={() => {}} // No drag on mobile
                                 users={users}
+                                currentUser={currentUser}
                                 recurrentCount={0}
                                 isDragging={false}
+                                systemSettings={systemSettings}
+                                systemTags={systemTags}
+                                onStickyNote={onStickyNote}
                             />
                         ))}
                     </div>

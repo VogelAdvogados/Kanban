@@ -1,5 +1,7 @@
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ColumnDefinition, Case, User } from '../../types';
+import { ColumnDefinition, Case, User, SmartAction, SystemSettings, SystemTag, StickyNote } from '../../types';
 import { CaseCard } from '../CaseCard';
 import { TRANSITION_RULES } from '../../constants';
 import { ArrowRight, FileText, Scale, Archive, Gavel, Siren, LayoutDashboard, Sparkles, Inbox, MoveRight, AlertCircle, ArrowUpCircle } from 'lucide-react';
@@ -17,8 +19,13 @@ interface KanbanColumnProps {
   recurrencyMap: Map<string, number>;
   onWhatsApp: (c: Case) => void;
   onQuickCheck: (c: Case) => void;
+  onSmartAction: (c: Case, action: SmartAction) => void;
+  onStickyNote: (c: Case, note?: StickyNote) => void;
   users: User[];
+  currentUser?: User;
   isSuggested: boolean;
+  systemSettings: SystemSettings;
+  systemTags: SystemTag[];
 }
 
 // Visual configuration for zones
@@ -62,7 +69,7 @@ const getDragFeedback = (targetColId: string, draggedCase: Case | undefined) => 
 };
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({ 
-    column, cases, activeTheme, draggedCase, onDrop, onDragStart, onDragEnd, onCardClick, recurrencyMap, onWhatsApp, onQuickCheck, users, isSuggested 
+    column, cases, activeTheme, draggedCase, onDrop, onDragStart, onDragEnd, onCardClick, recurrencyMap, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, users, currentUser, isSuggested, systemSettings, systemTags
 }) => {
     
     const isZone = column.id.startsWith('zone_');
@@ -140,7 +147,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
         }
     };
 
-    const visibleCases = isZone ? [] : sortedCases.slice(0, visibleCount);
+    // BUG FIX: Ensure dragged item is visible in source column during drag even if outside virtual window
+    const visibleCases = useMemo(() => {
+        const list = isZone ? [] : sortedCases.slice(0, visibleCount);
+        if (draggedCase && draggedCase.columnId === column.id && !list.find(c => c.id === draggedCase.id)) {
+            list.push(draggedCase);
+        }
+        return list;
+    }, [isZone, sortedCases, visibleCount, draggedCase, column.id]);
 
     return (
         <div 
@@ -220,7 +234,12 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                             onDragEnd={onDragEnd}
                             onWhatsApp={onWhatsApp}
                             onQuickCheck={onQuickCheck}
+                            onSmartAction={onSmartAction}
+                            onStickyNote={onStickyNote}
                             users={users}
+                            currentUser={currentUser}
+                            systemSettings={systemSettings}
+                            systemTags={systemTags}
                         />
                     ))}
                     

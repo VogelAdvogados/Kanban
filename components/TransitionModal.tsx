@@ -1,9 +1,11 @@
+
 import React, { useEffect } from 'react';
-import { FileText, Calendar, Award, ArrowRight, AlertTriangle, Clock, User } from 'lucide-react';
-import { TransitionType, User as UserType, Case } from '../types';
+import { FileText, Calendar, Award, ArrowRight, AlertTriangle, Clock, User, CornerUpLeft } from 'lucide-react';
+import { TransitionType, User as UserType, Case, INSSAgency } from '../types';
 import { ProtocolForm } from './transitions/ProtocolForm';
 import { ConclusionForm } from './transitions/ConclusionForm';
 import { DeadlineForm, PendencyForm } from './transitions/TaskForms';
+import { AppealReturnForm } from './transitions/AppealReturnForm';
 
 interface TransitionModalProps {
   type: TransitionType;
@@ -15,10 +17,12 @@ interface TransitionModalProps {
   setData: (data: any) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  commonDocs?: string[]; // New
+  agencies?: INSSAgency[]; // New
 }
 
 export const TransitionModal: React.FC<TransitionModalProps> = ({ 
-    type, data, caseContext, currentResponsibleId, users, targetColumnId, setData, onConfirm, onCancel 
+    type, data, caseContext, currentResponsibleId, users, targetColumnId, setData, onConfirm, onCancel, commonDocs, agencies
 }) => {
   
   // Initialize default data
@@ -28,6 +32,10 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
     if(!data.missingDocs && type === 'PENDENCY') updates.missingDocs = [];
     if (!data.benefitDate && type === 'CONCLUSION_NB') {
         updates.benefitDate = new Date().toISOString().slice(0, 10);
+    }
+    if (type === 'APPEAL_RETURN') {
+        if (data.createSpecialTask === undefined) updates.createSpecialTask = true;
+        if (!data.appealOutcome) updates.appealOutcome = 'IMPROVIDO'; // Default
     }
     if (Object.keys(updates).length > 0) {
         setData({ ...data, ...updates });
@@ -52,10 +60,20 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
           description = targetColumnId === 'aux_pericia' ? 'Registre o protocolo e a data do agendamento.' : 'O processo foi protocolado. Registre os dados.';
           break;
       case 'PROTOCOL_APPEAL':
-          title = 'Protocolo de Recurso';
+          if (targetColumnId === 'rec_camera') {
+              title = 'Recurso Especial (Câmara/CAJ)';
+              description = 'O processo subiu para a 2ª Instância. Insira o protocolo.';
+              color = 'text-purple-600';
+          } else if (targetColumnId === 'rec_junta') {
+              title = 'Recurso Ordinário (Junta/JR)';
+              description = 'Interposição de recurso na 1ª Instância. Insira o protocolo.';
+              color = 'text-indigo-600';
+          } else {
+              title = 'Protocolo de Recurso';
+              description = 'Recurso enviado. Quem monitorará?';
+              color = 'text-indigo-600';
+          }
           Icon = FileText;
-          color = 'text-indigo-600';
-          description = 'Recurso enviado à Junta/CRPS. Quem monitorará?';
           break;
       case 'CONCLUSION_NB':
           title = 'Conclusão da Análise';
@@ -75,6 +93,12 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
           color = 'text-red-500';
           description = 'Identifique documentos faltantes.';
           break;
+      case 'APPEAL_RETURN':
+          title = 'Retorno de Recurso';
+          Icon = CornerUpLeft;
+          color = 'text-orange-600';
+          description = 'O recurso voltou da Junta. Registre o resultado.';
+          break;
   }
 
   const validateAndConfirm = () => {
@@ -82,6 +106,10 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
         if (!data.benefitNumber) { alert("NB é obrigatório."); return; }
         if (!data.benefitDate) { alert("Data da Decisão é obrigatória."); return; }
         if (!data.outcome) { alert("Selecione o resultado (Concedido/Indeferido)."); return; }
+    }
+    if (type === 'APPEAL_RETURN') {
+        if (!data.appealDecisionDate) { alert("Data da decisão é obrigatória."); return; }
+        if (!data.appealOutcome) { alert("Selecione o resultado."); return; }
     }
     onConfirm();
   };
@@ -102,7 +130,7 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
             
             <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1 kanban-scroll">
                 {(type === 'PROTOCOL_INSS' || type === 'PROTOCOL_APPEAL') && (
-                    <ProtocolForm type={type} data={data} onChange={handleDataChange} targetColumnId={targetColumnId} />
+                    <ProtocolForm type={type} data={data} onChange={handleDataChange} targetColumnId={targetColumnId} agencies={agencies} />
                 )}
                 
                 {type === 'CONCLUSION_NB' && (
@@ -114,7 +142,11 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                 )}
 
                 {type === 'PENDENCY' && (
-                    <PendencyForm data={data} onChange={handleDataChange} />
+                    <PendencyForm data={data} onChange={handleDataChange} commonDocs={commonDocs} />
+                )}
+
+                {type === 'APPEAL_RETURN' && (
+                    <AppealReturnForm data={data} onChange={handleDataChange} />
                 )}
 
                 {/* Handover Section */}

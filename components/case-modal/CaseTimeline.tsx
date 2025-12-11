@@ -1,21 +1,26 @@
 
-
-import React, { useState } from 'react';
-import { FileText, CheckCircle, XCircle, HelpCircle, Briefcase, Calculator, Hash, Clock, Siren, Plus, Trash2, Calendar, Gavel, ShieldAlert, ArrowRight, LayoutList, FileInput } from 'lucide-react';
-import { Case, MandadoSeguranca } from '../../types';
-import { BENEFIT_OPTIONS, ADMIN_COLUMNS, AUX_DOENCA_COLUMNS, JUDICIAL_COLUMNS, RECURSO_ADM_COLUMNS } from '../../constants';
-import { formatBenefitNumber } from '../../utils';
+import React, { useState, useMemo, useEffect } from 'react';
+import { FileText, CheckCircle, XCircle, HelpCircle, Briefcase, Calculator, Hash, Clock, Siren, Plus, Trash2, Calendar, Gavel, ShieldAlert, ArrowRight, LayoutList, FileInput, ChevronRight, Activity, TrendingUp, Stethoscope, MapPin, ClipboardList, Heart, Users, Wheat, Timer, Construction, Copy, Check } from 'lucide-react';
+import { Case, MandadoSeguranca, INSSAgency } from '../../types';
+import { BENEFIT_OPTIONS, ADMIN_COLUMNS, AUX_DOENCA_COLUMNS, JUDICIAL_COLUMNS, RECURSO_ADM_COLUMNS, DEFAULT_INSS_AGENCIES } from '../../constants';
+import { formatBenefitNumber, getDaysSince, getBenefitGroup } from '../../utils';
+import { db } from '../../services/database';
 
 interface CaseTimelineProps {
   data: Case;
   onChange: (updates: Partial<Case>) => void;
 }
 
-const PERICIA_REQUIRED_CODES = ['31', '32', '91'];
-
 export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) => {
   const [newMS, setNewMS] = useState<Partial<MandadoSeguranca>>({ status: 'AGUARDANDO', reason: 'DEMORA_ANALISE' });
   const [showMsForm, setShowMsForm] = useState(false);
+  const [copiedKit, setCopiedKit] = useState(false);
+  const [agenciesList, setAgenciesList] = useState<INSSAgency[]>(DEFAULT_INSS_AGENCIES);
+
+  // Load Agencies Async
+  useEffect(() => {
+      db.getAgencies().then(setAgenciesList);
+  }, []);
 
   // --- LOGIC FOR VISUAL STEPPER ---
   const getSteps = () => {
@@ -30,6 +35,56 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
 
   const steps = getSteps();
   const currentStepIndex = steps.findIndex(s => s.id === data.columnId);
+
+  // --- BENEFIT CONTEXT ---
+  const benefitGroup = getBenefitGroup(data.benefitType);
+  const isIncapacity = benefitGroup === 'INCAPACITY';
+  const isPension = benefitGroup === 'PENSION';
+  const isRetirementAge = benefitGroup === 'RETIREMENT_AGE';
+  const isRetirementTime = benefitGroup === 'RETIREMENT_TIME';
+  const isSpecial = benefitGroup === 'SPECIAL';
+  
+  // --- PROCESS CLOCK LOGIC (Relógio do MS) ---
+  const processClock = useMemo(() => {
+      let startDate = data.protocolDate;
+      let label = 'Protocolo INSS';
+      let limit = 90; // Dias normais
+      let msLimit = 120; // Dias para MS
+
+      // Lógica para Recurso
+      if (data.view === 'RECURSO_ADM') {
+          if (data.columnId.includes('camera') || data.columnId.includes('especial')) {
+              startDate = data.appealEspecialDate;
+              label = 'Recurso Especial (2ª Inst.)';
+          } else {
+              startDate = data.appealOrdinarioDate || data.appealProtocolDate;
+              label = 'Recurso Ordinário (1ª Inst.)';
+          }
+      }
+
+      if (!startDate) return null;
+
+      const days = getDaysSince(startDate) || 0;
+      const progress = Math.min((days / msLimit) * 100, 100);
+      
+      let status = 'NORMAL';
+      let color = 'bg-blue-500';
+      let message = 'Dentro do prazo esperado.';
+
+      if (days > msLimit) {
+          status = 'CRITICAL';
+          color = 'bg-red-500';
+          message = 'Prazo de MS atingido! Demora excessiva.';
+      } else if (days > limit) {
+          status = 'WARNING';
+          color = 'bg-orange-500';
+          message = 'Atenção: Prazo administrativo extrapolado.';
+      } else {
+          color = 'bg-emerald-500';
+      }
+
+      return { days, label, progress, status, color, message, msLimit };
+  }, [data]);
 
   // --- MANDADO DE SEGURANÇA HANDLERS ---
   const handleAddMS = () => {
@@ -51,7 +106,193 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
       onChange({ mandadosSeguranca: data.mandadosSeguranca?.filter(m => m.id !== id) });
   };
 
-  const requiresPericia = data.benefitType && PERICIA_REQUIRED_CODES.includes(data.benefitType);
+  const handleGenerateKitPericia = async () => {
+      // Find exact address
+      const agency = agenciesList.find(a => a.name === data.periciaLocation);
+      const fullLocation = agency ? `${agency.name} (${agency.address})` : (data.periciaLocation || 'Agência do INSS');
+
+      const periciaText = `
+*KIT PERÍCIA - RAMBO PREV*
+--------------------------
+*Cliente:* ${data.clientName}
+*Data:* ${data.periciaDate ? new Date(data.periciaDate).toLocaleDateString() : 'A DEFINIR'}
+*Hora:* ${data.periciaTime || 'A DEFINIR'}
+*Local:* ${fullLocation}
+
+*O QUE LEVAR (ORIGINAIS):*
+[ ] RG e CPF
+[ ] Carteira de Trabalho (Todas)
+[ ] Laudos Médicos (Atuais e Antigos)
+[ ] Receitas de Medicamentos
+[ ] Exames de Imagem (Raio-X, Ressonância)
+
+*DICA DE OURO:*
+Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apenas da dor, fale da limitação.
+      `.trim();
+      
+      try {
+          await navigator.clipboard.writeText(periciaText);
+          setCopiedKit(true);
+          setTimeout(() => setCopiedKit(false), 2000);
+      } catch (err) {
+          alert("Erro ao copiar. Tente selecionar o texto manualmente.");
+      }
+  };
+
+  const getConfidenceColor = (val: number) => {
+      if(val <= 1) return 'text-red-500 bg-red-50 border-red-200';
+      if(val === 2) return 'text-orange-500 bg-orange-50 border-orange-200';
+      if(val === 3) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      if(val >= 4) return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+      return 'text-slate-500 bg-slate-50';
+  };
+
+  // --- BENEFIT SPECIFIC PANELS ---
+
+  // 1. INCAPACIDADE (AUX DOENÇA / LOAS DEFICIENTE)
+  const renderIncapacityPanel = () => (
+      <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg">
+          <label className="block text-[10px] font-bold text-orange-700 uppercase mb-2 flex items-center gap-1">
+              <Stethoscope size={12}/> Estratégia: Incapacidade
+          </label>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+              <button 
+                  onClick={() => onChange({ strategyType: 'ATESTMED' })}
+                  className={`text-xs p-2 rounded border transition-colors font-bold ${data.strategyType === 'ATESTMED' ? 'bg-orange-200 border-orange-300 text-orange-900' : 'bg-white border-orange-100 text-slate-500 hover:bg-orange-50'}`}
+              >
+                  ATESTMED (Doc)
+              </button>
+              <button 
+                  onClick={() => onChange({ strategyType: 'PRESENCIAL' })}
+                  className={`text-xs p-2 rounded border transition-colors font-bold ${data.strategyType === 'PRESENCIAL' ? 'bg-blue-200 border-blue-300 text-blue-900' : 'bg-white border-blue-100 text-slate-500 hover:bg-blue-50'}`}
+              >
+                  PRESENCIAL
+              </button>
+          </div>
+          
+          <div className="border-t border-orange-200 pt-2">
+              <div className="flex justify-between items-center mb-2">
+                  <label className="block text-[10px] font-bold text-orange-800 uppercase">Agendamento Perícia</label>
+                  <button 
+                      onClick={handleGenerateKitPericia}
+                      className={`text-[9px] px-2 py-0.5 rounded border font-bold flex items-center gap-1 transition-all ${copiedKit ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-orange-700 border-orange-200 hover:bg-orange-100'}`}
+                  >
+                      {copiedKit ? <Check size={10}/> : <Copy size={10}/>} {copiedKit ? 'Copiado!' : 'Copiar Kit'}
+                  </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input type="date" className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs outline-none focus:border-orange-300" value={data.periciaDate || ''} onChange={e => onChange({ periciaDate: e.target.value })} />
+                  <input type="time" className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs outline-none focus:border-orange-300" value={data.periciaTime || ''} onChange={e => onChange({ periciaTime: e.target.value })} />
+              </div>
+              <div className="relative">
+                  <MapPin size={12} className="absolute left-2 top-2 text-slate-400"/>
+                  <input 
+                    type="text" 
+                    placeholder="Local da Agência" 
+                    className="w-full bg-white border border-slate-200 rounded p-1.5 pl-6 text-xs outline-none focus:border-orange-300" 
+                    value={data.periciaLocation || ''} 
+                    onChange={e => onChange({ periciaLocation: e.target.value })} 
+                    list="agencies-list"
+                  />
+                  <datalist id="agencies-list">
+                      {agenciesList.map(agency => (
+                          <option key={agency.id} value={agency.name} />
+                      ))}
+                  </datalist>
+              </div>
+          </div>
+      </div>
+  );
+
+  // 2. PENSÃO POR MORTE
+  const renderPensionPanel = () => (
+      <div className="bg-pink-50 border border-pink-100 p-3 rounded-lg">
+          <label className="block text-[10px] font-bold text-pink-700 uppercase mb-2 flex items-center gap-1">
+              <Heart size={12}/> Detalhes do Instituidor (Falecido)
+          </label>
+          <div className="space-y-2">
+              <div>
+                  <label className="text-[10px] text-pink-600 font-bold block mb-1">Nome do Instituidor</label>
+                  <input 
+                      type="text" 
+                      className="w-full bg-white border border-pink-200 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-pink-300"
+                      value={data.deceasedName || ''}
+                      onChange={e => onChange({ deceasedName: e.target.value })}
+                      placeholder="Nome completo do falecido"
+                  />
+              </div>
+              <div>
+                  <label className="text-[10px] text-pink-600 font-bold block mb-1">Data do Óbito</label>
+                  <input 
+                      type="date" 
+                      className="w-full bg-white border border-pink-200 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-pink-300"
+                      value={data.deceasedDate || ''}
+                      onChange={e => onChange({ deceasedDate: e.target.value })}
+                  />
+                  <p className="text-[9px] text-pink-500 mt-0.5">*Define a legislação aplicável (Tempus Regit Actum).</p>
+              </div>
+          </div>
+      </div>
+  );
+
+  // 3. APOSENTADORIA (Tempo / Idade / Especial)
+  const renderRetirementPanel = () => (
+      <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-lg">
+          <label className="block text-[10px] font-bold text-indigo-700 uppercase mb-2 flex items-center gap-1">
+              <Timer size={12}/> Cálculo de Tempo
+          </label>
+          <div className="flex gap-2 items-end mb-2">
+              <div className="flex-1">
+                  <label className="text-[10px] text-indigo-600 font-bold block mb-1">Anos</label>
+                  <input 
+                      type="number" 
+                      className="w-full bg-white border border-indigo-200 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-indigo-300 text-center font-bold"
+                      value={data.contributionTimeYears || ''}
+                      onChange={e => onChange({ contributionTimeYears: parseInt(e.target.value) })}
+                      placeholder="0"
+                  />
+              </div>
+              <div className="flex-1">
+                  <label className="text-[10px] text-indigo-600 font-bold block mb-1">Meses</label>
+                  <input 
+                      type="number" 
+                      className="w-full bg-white border border-indigo-200 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-indigo-300 text-center font-bold"
+                      value={data.contributionTimeMonths || ''}
+                      onChange={e => onChange({ contributionTimeMonths: parseInt(e.target.value) })}
+                      placeholder="0"
+                  />
+              </div>
+          </div>
+          {isSpecial && (
+              <div className="mt-2 pt-2 border-t border-indigo-200">
+                  <label className="flex items-center gap-2 text-xs text-indigo-800">
+                      <Construction size={12} />
+                      <span className="font-bold">Perfil Profissiográfico (PPP)</span>
+                  </label>
+                  <p className="text-[9px] text-indigo-500 mt-1">Verificar se há exposição a agentes nocivos e se o LTCAT está atualizado.</p>
+              </div>
+          )}
+      </div>
+  );
+
+  // 4. RURAL / HIBRIDA
+  const renderRuralPanel = () => (
+      <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg">
+          <label className="block text-[10px] font-bold text-amber-700 uppercase mb-2 flex items-center gap-1">
+              <Wheat size={12}/> Prova Rural
+          </label>
+          <div>
+              <label className="text-[10px] text-amber-600 font-bold block mb-1">Início de Prova Material</label>
+              <input 
+                  type="date" 
+                  className="w-full bg-white border border-amber-200 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-300"
+                  value={data.ruralProofStart || ''}
+                  onChange={e => onChange({ ruralProofStart: e.target.value })}
+              />
+              <p className="text-[9px] text-amber-500 mt-0.5">Data do documento mais antigo (ex: Certidão Casamento).</p>
+          </div>
+      </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -98,13 +339,61 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
             </div>
         </div>
 
-        {/* 2. DADOS DO PROCESSO (LOGICAL FLOW) */}
+        {/* 2. RELÓGIO PROCESSUAL (CONSULTIVO) */}
+        {processClock && (
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 relative overflow-hidden">
+                <div className="flex justify-between items-end mb-2 relative z-10">
+                    <div>
+                        <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                            <Clock size={16} className="text-blue-600"/> Monitoramento: {processClock.label}
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1">{processClock.message}</p>
+                    </div>
+                    <div className="text-right">
+                        <span className={`text-2xl font-bold ${processClock.status === 'CRITICAL' ? 'text-red-600' : processClock.status === 'WARNING' ? 'text-orange-600' : 'text-emerald-600'}`}>
+                            {processClock.days} dias
+                        </span>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">Decorridos</p>
+                    </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden relative z-10">
+                    <div 
+                        className={`h-full transition-all duration-1000 ${processClock.color}`} 
+                        style={{ width: `${processClock.progress}%` }}
+                    ></div>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1 relative z-10 font-bold">
+                    <span>Protocolo (Dia 0)</span>
+                    <span>Prazo MS ({processClock.msLimit} dias)</span>
+                </div>
+
+                {/* MS Suggestion Overlay */}
+                {processClock.status === 'CRITICAL' && (
+                    <div className="mt-3 bg-red-50 border border-red-200 rounded p-2 flex items-center justify-between animate-pulse">
+                        <div className="flex items-center gap-2 text-red-700 text-xs font-bold">
+                            <Siren size={14}/>
+                            <span>Prazo de Mandado de Segurança atingido!</span>
+                        </div>
+                        <button 
+                            onClick={() => setShowMsForm(true)}
+                            className="text-[10px] bg-red-600 text-white px-2 py-1 rounded font-bold hover:bg-red-700"
+                        >
+                            Impetrar Agora
+                        </button>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* 3. DADOS DO PROCESSO (CONTEXTUAL) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* BOX 1: REQUERIMENTO INICIAL */}
+            {/* BOX 1: REQUERIMENTO & VIABILIDADE */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <Briefcase size={14}/> 1. Requerimento Inicial
+                    <Briefcase size={14}/> 1. Dados Iniciais
                 </h3>
                 <div className="space-y-4 flex-1">
                     {/* Espécie */}
@@ -122,8 +411,14 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
                         </select>
                     </div>
 
+                    {/* CONTEXTUAL PANELS */}
+                    {isIncapacity && renderIncapacityPanel()}
+                    {isPension && renderPensionPanel()}
+                    {(isRetirementAge || isRetirementTime || isSpecial) && renderRetirementPanel()}
+                    {(data.benefitType === '48' || data.benefitType === '08') && renderRuralPanel()} {/* Híbrida/Rural explícito */}
+
+                    {/* Protocolo - Sempre visível */}
                     <div className="grid grid-cols-2 gap-3">
-                         {/* Protocolo */}
                          <div>
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Protocolo INSS</label>
                             <div className="relative">
@@ -137,8 +432,6 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
                                 <Hash size={12} className="absolute left-2.5 top-3 text-slate-400"/>
                             </div>
                         </div>
-
-                        {/* DER */}
                         <div>
                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">DER (Data Entrada)</label>
                              <input 
@@ -150,29 +443,40 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
                         </div>
                     </div>
 
-                    {requiresPericia && (
-                         <div className={`p-3 rounded-lg border flex items-center justify-between ${data.periciaDate ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-                            <div>
-                                <span className={`text-[10px] font-bold uppercase block mb-1 ${data.periciaDate ? 'text-blue-600' : 'text-orange-600'}`}>
-                                    Data da Perícia Médica
-                                </span>
+                    {/* Viabilidade e Feeling (Universal) */}
+                    <div className="bg-blue-50/30 p-3 rounded-lg border border-blue-100">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-[10px] font-bold text-blue-700 uppercase flex items-center gap-1">
+                                <Calculator size={10}/> Análise de Viabilidade
+                            </h4>
+                            {/* MINI CONFIDENCE SLIDER */}
+                            <div className={`flex items-center gap-1 px-2 py-0.5 rounded border ${getConfidenceColor(data.confidenceRating !== undefined ? data.confidenceRating : 3)}`}>
+                                <TrendingUp size={10} />
+                                <span className="text-[9px] font-bold">Confiança: {data.confidenceRating ?? 3}/5</span>
                                 <input 
-                                    type="datetime-local" 
-                                    className="bg-transparent text-sm font-bold w-full outline-none text-slate-700"
-                                    value={data.periciaDate || ''}
-                                    onChange={(e) => onChange({ periciaDate: e.target.value })}
+                                    type="range" 
+                                    min="0" max="5" step="1" 
+                                    className="w-12 h-1 ml-1 accent-current cursor-pointer"
+                                    value={data.confidenceRating !== undefined ? data.confidenceRating : 3}
+                                    onChange={(e) => onChange({ confidenceRating: parseInt(e.target.value) })}
+                                    title="Ajustar Feeling (0-5)"
                                 />
                             </div>
-                            <Clock size={18} className={data.periciaDate ? 'text-blue-400' : 'text-orange-400'}/>
                         </div>
-                    )}
+                        <textarea 
+                            className="w-full text-xs p-2 rounded border border-blue-200 bg-white outline-none resize-none h-16"
+                            placeholder="Notas técnicas sobre o caso (Simulação, RMI esperada, Pendências de CNIS...)"
+                            value={data.referral || ''} 
+                            onChange={(e) => onChange({ referral: e.target.value })}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* BOX 2: CONCLUSÃO E RECURSO */}
+            {/* BOX 2: CONCLUSÃO ADMINISTRATIVA */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <FileText size={14}/> 2. Conclusão & Recurso
+                    <FileText size={14}/> 2. Conclusão da Análise
                 </h3>
                 
                 <div className="space-y-4">
@@ -203,7 +507,7 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
                         </div>
                     </div>
 
-                    {/* Resultado Administrativo Switch */}
+                    {/* Resultado Switch */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resultado da Análise</label>
                         <div className="flex bg-slate-50 rounded-lg p-1 border border-slate-200">
@@ -234,47 +538,112 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
                              })}
                         </div>
                     </div>
-
-                    {/* Separator for Appeal */}
-                    <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-slate-100"></div>
-                        </div>
-                        <div className="relative flex justify-center">
-                            <span className="bg-white px-2 text-[10px] text-slate-400 uppercase font-bold">Fase Recursal</span>
-                        </div>
-                    </div>
-
-                    {/* Recurso Adm */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Protocolo Recurso</label>
-                            <div className="relative">
-                                <input 
-                                    type="text" 
-                                    value={data.appealProtocolNumber || ''} 
-                                    onChange={(e) => onChange({ appealProtocolNumber: e.target.value })}
-                                    className="w-full bg-indigo-50 border border-indigo-200 rounded p-2 text-sm text-indigo-700 font-mono focus:border-indigo-300 outline-none pl-7"
-                                    placeholder="REC-0000"
-                                />
-                                <FileInput size={12} className="absolute left-2.5 top-3 text-indigo-400"/>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Data do Recurso</label>
-                            <input 
-                                type="date" 
-                                value={data.appealProtocolDate || ''} 
-                                onChange={(e) => onChange({ appealProtocolDate: e.target.value })}
-                                className="w-full bg-indigo-50 border border-indigo-200 rounded p-2 text-sm text-indigo-700 focus:border-indigo-300 outline-none"
-                            />
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
 
-        {/* 3. MANDADOS DE SEGURANÇA */}
+        {/* 3. FASE RECURSAL (DIVIDIDA) */}
+        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-inner">
+            <h3 className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <Gavel size={14}/> Fase Recursal
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* 1ª INSTÂNCIA */}
+                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm relative">
+                    <div className="absolute -top-3 left-3 bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded border border-indigo-200">
+                        1ª Instância (Junta/JR)
+                    </div>
+                    
+                    <div className="mt-2 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Protocolo Ordinário</label>
+                                <input 
+                                    type="text" 
+                                    value={data.appealOrdinarioProtocol || data.appealProtocolNumber || ''} 
+                                    onChange={(e) => onChange({ appealOrdinarioProtocol: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs font-mono focus:border-indigo-300 outline-none"
+                                    placeholder="Protocolo JR"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Recurso</label>
+                                <input 
+                                    type="date" 
+                                    value={data.appealOrdinarioDate || data.appealProtocolDate || ''} 
+                                    onChange={(e) => onChange({ appealOrdinarioDate: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs focus:border-indigo-300 outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Status na Junta</label>
+                            <select 
+                                className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs outline-none"
+                                value={data.appealOrdinarioStatus || ''}
+                                onChange={(e) => onChange({ appealOrdinarioStatus: e.target.value as any })}
+                            >
+                                <option value="">Selecione...</option>
+                                <option value="AGUARDANDO">Aguardando Julgamento</option>
+                                <option value="PROVIDO">Provido (Ganhou)</option>
+                                <option value="IMPROVIDO">Improvido (Perdeu)</option>
+                                <option value="EXIGENCIA">Em Exigência</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2ª INSTÂNCIA */}
+                <div className={`bg-white p-4 rounded-lg border shadow-sm relative transition-opacity ${data.appealOrdinarioStatus === 'IMPROVIDO' ? 'opacity-100 border-slate-200' : 'opacity-70 border-dashed border-slate-300'}`}>
+                    <div className="absolute -top-3 left-3 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200">
+                        2ª Instância (Câmara/CAJ)
+                    </div>
+                    
+                    <div className="mt-2 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Protocolo Especial</label>
+                                <input 
+                                    type="text" 
+                                    value={data.appealEspecialProtocol || ''} 
+                                    onChange={(e) => onChange({ appealEspecialProtocol: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs font-mono focus:border-purple-300 outline-none"
+                                    placeholder="Protocolo CAJ"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Recurso</label>
+                                <input 
+                                    type="date" 
+                                    value={data.appealEspecialDate || ''} 
+                                    onChange={(e) => onChange({ appealEspecialDate: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs focus:border-purple-300 outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Status na Câmara</label>
+                            <select 
+                                className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs outline-none"
+                                value={data.appealEspecialStatus || ''}
+                                onChange={(e) => onChange({ appealEspecialStatus: e.target.value as any })}
+                            >
+                                <option value="">Selecione...</option>
+                                <option value="AGUARDANDO">Aguardando Julgamento</option>
+                                <option value="PROVIDO">Provido (Ganhou)</option>
+                                <option value="IMPROVIDO">Improvido (Perdeu)</option>
+                                <option value="BAIXADO">Baixado à Origem</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        {/* 4. MANDADOS DE SEGURANÇA */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
              <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">

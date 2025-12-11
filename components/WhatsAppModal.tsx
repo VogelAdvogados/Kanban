@@ -1,17 +1,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, X, Send, Copy, FileText, ChevronRight } from 'lucide-react';
-import { Case } from '../types';
-import { WHATSAPP_TEMPLATES } from '../constants';
+import { Case, INSSAgency, WhatsAppTemplate } from '../types';
+import { WHATSAPP_TEMPLATES as DEFAULT_TEMPLATES } from '../constants';
 import { formatDate } from '../utils';
 
 interface WhatsAppModalProps {
   data: Case;
   onClose: () => void;
+  onLog?: (message: string) => void;
+  agencies?: INSSAgency[]; // Pass Agencies List
+  templates?: WhatsAppTemplate[]; // NEW PROP
 }
 
-export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({ data, onClose }) => {
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(WHATSAPP_TEMPLATES[0].id);
+export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({ 
+    data, onClose, onLog, agencies = [], templates 
+}) => {
+  // Use passed templates or fallback to constants if not yet loaded
+  const availableTemplates = templates && templates.length > 0 ? templates : DEFAULT_TEMPLATES;
+  
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(availableTemplates[0]?.id || '');
   const [message, setMessage] = useState('');
 
   // Function to hydrate the template with case data
@@ -22,22 +30,38 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({ data, onClose }) =
         docsList = '\n- ' + data.missingDocs.join('\n- ');
     }
 
+    // Resolve Agency Address
+    const agency = agencies.find(a => a.name === data.periciaLocation);
+    const fullLocation = agency ? `${agency.name}\n📍 Endereço: ${agency.address}` : (data.periciaLocation || 'Agência do INSS');
+
     return text
       .replace('{NOME}', data.clientName.split(' ')[0]) // Primeiro nome
       .replace('{ID_INTERNO}', data.internalId)
       .replace('{NB}', data.benefitNumber || 'não informado')
       .replace('{PROTOCOLO}', data.protocolNumber || 'não informado')
       .replace('{DATA_PERICIA}', formatDate(data.periciaDate) || 'não agendada')
+      .replace('{LOCAL_PERICIA}', fullLocation)
       .replace('{DATA_DCB}', formatDate(data.dcbDate) || 'não informada')
       .replace('{LISTA_DOCS}', docsList);
   };
 
   useEffect(() => {
-    const template = WHATSAPP_TEMPLATES.find(t => t.id === selectedTemplateId);
+    const template = availableTemplates.find(t => t.id === selectedTemplateId);
+    
+    // Auto-select Pericia Template if data suggests it (Logic enhancement)
+    if (data.columnId === 'aux_pericia' && data.periciaDate && !message) { // Only auto-select if message empty to prevent overwrite
+        const periciaTpl = availableTemplates.find(t => t.category === 'PERICIA');
+        if (periciaTpl) {
+            setSelectedTemplateId(periciaTpl.id);
+            setMessage(hydrateTemplate(periciaTpl.text));
+            return;
+        }
+    }
+
     if (template) {
         setMessage(hydrateTemplate(template.text));
     }
-  }, [selectedTemplateId, data]);
+  }, [selectedTemplateId, data, agencies, availableTemplates]);
 
   const handleSend = () => {
     if (!data.phone) {
@@ -50,6 +74,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({ data, onClose }) =
     // Encode and open WhatsApp
     const encodedMessage = encodeURIComponent(message);
     window.open(`https://wa.me/${finalNumber}?text=${encodedMessage}`, '_blank');
+    
+    // Log Activity if callback provided
+    if (onLog) {
+        const template = availableTemplates.find(t => t.id === selectedTemplateId);
+        const typeLabel = template ? template.label : 'Mensagem Personalizada';
+        const shortMsg = message.length > 50 ? message.substring(0, 50) + '...' : message;
+        
+        // 360 Feature: Send structured log so History can detect and color it
+        onLog(`[WHATSAPP] ${typeLabel}: "${shortMsg}"`);
+    }
+
     onClose();
   };
 
@@ -68,7 +103,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({ data, onClose }) =
                 <FileText size={14}/> Modelos
             </h3>
             <div className="space-y-2">
-                {WHATSAPP_TEMPLATES.map(t => (
+                {availableTemplates.map(t => (
                     <button
                         key={t.id}
                         onClick={() => setSelectedTemplateId(t.id)}

@@ -1,34 +1,60 @@
+
 import React, { useMemo } from 'react';
-import { Case } from '../types';
-import { Briefcase, Layers, AlertTriangle, Clock, Calendar, MessageCircle, X, TrendingUp } from 'lucide-react';
-import { getDaysSince, getDaysDiff, formatDate, parseLocalYMD } from '../utils';
+import { Case, User } from '../types';
+import { Briefcase, Layers, AlertTriangle, Clock, Calendar, MessageCircle, X, TrendingUp, Activity, AlertOctagon, CheckCircle } from 'lucide-react';
+import { getDaysSince, getDaysDiff, formatDate, parseLocalYMD, analyzeCaseHealth } from '../utils';
 import { VIEW_CONFIG, WHATSAPP_TEMPLATES } from '../constants';
 import { DashboardKPIs } from './dashboard/DashboardKPIs';
 
 interface DashboardProps {
   cases: Case[];
+  users: User[];
   onClose: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ cases, users, onClose }) => {
   
   const stats = useMemo(() => {
     const total = cases.length;
     
+    // Outcome Stats
     const conceded = cases.filter(c => 
         ['adm_concluido', 'aux_ativo', 'jud_transito', 'jud_cumprimento', 'jud_rpv'].includes(c.columnId)
     ).length;
-    
     const denied = cases.filter(c => 
         ['aux_indeferido', 'rec_resultado'].includes(c.columnId)
     ).length;
-
     const rate = (conceded + denied) > 0 ? Math.round((conceded / (conceded + denied)) * 100) : 0;
 
+    // Health Analysis (Using default settings for dashboard general view)
+    let healthCritical = 0;
+    let healthWarning = 0;
+    let contactCritical = 0;
+
+    // Simplified default settings for generic overview if context unavailable
+    const defaultSettings = {
+        sla_internal_analysis: 7,
+        sla_client_contact: 30,
+        sla_stagnation: 45,
+        sla_spider_web: 45,
+        pp_alert_days: 15,
+        show_probabilities: true
+    };
+
+    cases.forEach(c => {
+        const analysis = analyzeCaseHealth(c, defaultSettings);
+        if (analysis.status === 'CRITICAL') healthCritical++;
+        if (analysis.status === 'WARNING') healthWarning++;
+        if (analysis.contactStatus === 'CRITICAL') contactCritical++;
+    });
+
+    // Workload
     const workloadMap: Record<string, number> = {};
     cases.forEach(c => {
-        const name = c.responsibleName.split(' ')[0] + ' ' + (c.responsibleName.split(' ')[1]?.[0] || '') + '.'; 
-        workloadMap[name] = (workloadMap[name] || 0) + 1;
+        const user = users.find(u => u.id === c.responsibleId);
+        const rawName = user ? user.name : c.responsibleName;
+        const displayName = rawName.split(' ')[0] + ' ' + (rawName.split(' ')[1]?.[0] || '') + '.'; 
+        workloadMap[displayName] = (workloadMap[displayName] || 0) + 1;
     });
     const workload = Object.entries(workloadMap).sort((a, b) => b[1] - a[1]);
 
@@ -61,8 +87,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
         return bdate.getDate() === today.getDate() && bdate.getMonth() === today.getMonth();
     });
 
-    return { total, rate, birthdaysToday, workload, viewMap, stagnatedCases, upcomingDeadlines, stagnatedCount: stagnatedCases.length, upcomingDeadlinesCount: upcomingDeadlines.length };
-  }, [cases]);
+    return { 
+        total, rate, birthdaysToday, workload, viewMap, stagnatedCases, upcomingDeadlines, 
+        stagnatedCount: stagnatedCases.length, 
+        upcomingDeadlinesCount: upcomingDeadlines.length,
+        healthCritical, healthWarning, contactCritical
+    };
+  }, [cases, users]);
 
   const handleSendBirthday = (c: Case) => {
     if(!c.phone) {
@@ -86,9 +117,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
         <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center flex-shrink-0">
             <div>
                 <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="text-blue-600" /> Painel de Gestão
+                    <TrendingUp className="text-blue-600" /> Painel de Gestão 360º
                 </h2>
-                <p className="text-slate-500 text-sm">Panorama completo do escritório</p>
+                <p className="text-slate-500 text-sm">Panorama de saúde dos processos e relacionamento</p>
             </div>
             <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-red-500 rounded-full transition-colors">
                 <X size={20} />
@@ -98,6 +129,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, onClose }) => {
         <div className="p-6 overflow-y-auto flex-1 kanban-scroll">
             
             <DashboardKPIs stats={stats} />
+
+            {/* Health Monitor Section */}
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <Activity className="text-red-500" size={18}/>
+                            <h3 className="font-bold text-slate-700 text-sm">Saúde Crítica</h3>
+                        </div>
+                        <p className="text-xs text-slate-500">Processos parados além do limite</p>
+                    </div>
+                    <div className="mt-3">
+                        <span className="text-2xl font-bold text-red-600">{stats.healthCritical}</span>
+                        <span className="text-xs text-slate-400 ml-1">casos</span>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <AlertOctagon className="text-orange-500" size={18}/>
+                            <h3 className="font-bold text-slate-700 text-sm">Atenção Necessária</h3>
+                        </div>
+                        <p className="text-xs text-slate-500">Aproximando do limite de estagnação</p>
+                    </div>
+                    <div className="mt-3">
+                        <span className="text-2xl font-bold text-orange-600">{stats.healthWarning}</span>
+                        <span className="text-xs text-slate-400 ml-1">casos</span>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <MessageCircle className="text-blue-500" size={18}/>
+                            <h3 className="font-bold text-slate-700 text-sm">Risco de Relacionamento</h3>
+                        </div>
+                        <p className="text-xs text-slate-500">Sem contato fora do SLA definido</p>
+                    </div>
+                    <div className="mt-3">
+                        <span className="text-2xl font-bold text-blue-600">{stats.contactCritical}</span>
+                        <span className="text-xs text-slate-400 ml-1">clientes</span>
+                    </div>
+                </div>
+            </div>
 
             {/* MAIN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

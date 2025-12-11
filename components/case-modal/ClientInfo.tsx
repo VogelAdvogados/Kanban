@@ -1,7 +1,7 @@
 
 
 import React, { useState } from 'react';
-import { User, Copy, Check, Send, Key, ChevronUp, ChevronDown, MapPin, Search, XCircle, Phone, Cake } from 'lucide-react';
+import { User, Copy, Check, Send, Key, ChevronUp, ChevronDown, MapPin, Search, XCircle, Phone, Cake, Users } from 'lucide-react';
 import { Case } from '../../types';
 import { formatCPF, formatPhoneNumber } from '../../utils';
 
@@ -147,7 +147,28 @@ export const ClientInfo: React.FC<ClientInfoProps> = ({ data, onChange, onOpenWh
         {/* --- EXTENDED INFO --- */}
         {showExtendedInfo && (
             <div className="mt-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                 
+                 {/* INDICAÇÃO & DOCS */}
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <div className="relative group">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                            <Users size={12}/> Indicação (Referência)
+                        </label>
+                        <input 
+                            type="text" 
+                            value={data.referral || ''} 
+                            onChange={(e) => onChange({ referral: e.target.value })}
+                            className="w-full bg-blue-50 border border-blue-200 rounded p-2 text-sm text-blue-800 font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                            placeholder="Ex: Dr. Carlos"
+                            list="referral-options"
+                        />
+                        <datalist id="referral-options">
+                            <option value="Dr. Carlos" />
+                            <option value="Dr. Luciano" />
+                            <option value="Dr. Sérgio" />
+                            <option value="Cliente Antigo" />
+                        </datalist>
+                    </div>
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">RG (Identidade)</label>
                         <input 

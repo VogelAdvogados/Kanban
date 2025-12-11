@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { CheckSquare } from 'lucide-react';
+import { CheckSquare, AlertCircle } from 'lucide-react';
 import { COMMON_DOCUMENTS } from '../../constants';
 
 interface DeadlineFormProps {
@@ -9,25 +10,43 @@ interface DeadlineFormProps {
 
 export const DeadlineForm: React.FC<DeadlineFormProps> = ({ data, onChange }) => {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <div>
-        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Início</label>
-        <input 
-          type="date" 
-          className="w-full border-yellow-300 rounded text-sm focus:ring-yellow-500 focus:border-yellow-500"
-          value={data.deadlineStart}
-          onChange={e => onChange({ deadlineStart: e.target.value })}
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Prazo Final</label>
-        <input 
-          type="date" 
-          className="w-full border-yellow-300 rounded text-sm focus:ring-yellow-500 focus:border-yellow-500"
-          value={data.deadlineEnd}
-          onChange={e => onChange({ deadlineEnd: e.target.value })}
-        />
-      </div>
+    <div className="space-y-4">
+        {/* Detalhes da Exigência - Novo Campo */}
+        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+            <label className="block text-[10px] font-bold text-yellow-800 uppercase mb-1 flex items-center gap-1">
+                <AlertCircle size={12}/> O que o INSS pediu?
+            </label>
+            <textarea
+                className="w-full text-xs p-2 rounded border border-yellow-300 outline-none focus:ring-2 focus:ring-yellow-400 bg-white"
+                rows={3}
+                placeholder="Ex: Atualizar PPP da empresa X, apresentar LTCAT original, retificar CNIS..."
+                value={data.exigencyDetails || ''}
+                onChange={e => onChange({ exigencyDetails: e.target.value })}
+                autoFocus
+            />
+        </div>
+
+        {/* Datas */}
+        <div className="grid grid-cols-2 gap-3">
+            <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data da Ciência</label>
+                <input 
+                type="date" 
+                className="w-full border-slate-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+                value={data.deadlineStart}
+                onChange={e => onChange({ deadlineStart: e.target.value })}
+                />
+            </div>
+            <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Prazo Final (Cumprimento)</label>
+                <input 
+                type="date" 
+                className="w-full border-red-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                value={data.deadlineEnd}
+                onChange={e => onChange({ deadlineEnd: e.target.value })}
+                />
+            </div>
+        </div>
     </div>
   );
 };
@@ -35,10 +54,13 @@ export const DeadlineForm: React.FC<DeadlineFormProps> = ({ data, onChange }) =>
 interface PendencyFormProps {
   data: any;
   onChange: (data: any) => void;
+  commonDocs?: string[]; // Optional prop for custom list
 }
 
-export const PendencyForm: React.FC<PendencyFormProps> = ({ data, onChange }) => {
+export const PendencyForm: React.FC<PendencyFormProps> = ({ data, onChange, commonDocs }) => {
   
+  const availableDocs = commonDocs && commonDocs.length > 0 ? commonDocs : COMMON_DOCUMENTS;
+
   const toggleDoc = (doc: string) => {
     const current = data.missingDocs || [];
     if(current.includes(doc)) {
@@ -51,8 +73,8 @@ export const PendencyForm: React.FC<PendencyFormProps> = ({ data, onChange }) =>
   return (
     <div className="space-y-3">
       <label className="block text-[10px] font-bold text-red-500 uppercase">Selecione o que falta:</label>
-      <div className="grid grid-cols-2 gap-2">
-        {COMMON_DOCUMENTS.map((doc) => {
+      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto kanban-scroll pr-1">
+        {availableDocs.map((doc) => {
           const isChecked = (data.missingDocs || []).includes(doc);
           return (
             <button 

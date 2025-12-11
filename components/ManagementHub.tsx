@@ -1,7 +1,7 @@
 
 import React, { useState, Suspense, useEffect } from 'react';
 import { X, BarChart2, Calendar, CheckSquare, Users, FileText, Settings, LayoutGrid } from 'lucide-react';
-import { Case, User, DocumentTemplate, SystemLog, OfficeData } from '../types';
+import { Case, User, DocumentTemplate, SystemLog, OfficeData, SystemSettings, SystemTag, INSSAgency, WhatsAppTemplate, WorkflowRule } from '../types';
 
 // Using React.lazy for sub-components to keep the bundle light
 const Dashboard = React.lazy(() => import('./Dashboard').then(module => ({ default: module.Dashboard })));
@@ -34,6 +34,24 @@ interface ManagementHubProps {
   // Logging
   systemLogs: SystemLog[];
   addSystemLog: (action: string, details: string, user: string, category: SystemLog['category']) => void;
+  // Settings
+  systemSettings: SystemSettings;
+  setSystemSettings: (s: SystemSettings) => void;
+  // Tags
+  systemTags?: SystemTag[];
+  setSystemTags?: (t: SystemTag[]) => void;
+  // Common Docs
+  commonDocs?: string[];
+  setCommonDocs?: (docs: string[]) => void;
+  // Agencies
+  agencies?: INSSAgency[];
+  setAgencies?: (list: INSSAgency[]) => void;
+  // WhatsApp
+  whatsAppTemplates?: WhatsAppTemplate[];
+  setWhatsAppTemplates?: (list: WhatsAppTemplate[]) => void;
+  // Workflow
+  workflowRules?: WorkflowRule[];
+  setWorkflowRules?: (r: WorkflowRule[]) => void;
 }
 
 export const ManagementHub: React.FC<ManagementHubProps> = ({
@@ -42,7 +60,12 @@ export const ManagementHub: React.FC<ManagementHubProps> = ({
   officeData, setOfficeData, onImportData,
   onSelectCase, onToggleTask, onNewCase, onUpdateClient,
   documentTemplates, setDocumentTemplates,
-  systemLogs, addSystemLog
+  systemLogs, addSystemLog, systemSettings, setSystemSettings,
+  systemTags, setSystemTags,
+  commonDocs, setCommonDocs,
+  agencies, setAgencies,
+  whatsAppTemplates, setWhatsAppTemplates,
+  workflowRules, setWorkflowRules
 }) => {
   const [activeTab, setActiveTab] = useState<HubTab>(initialTab);
 
@@ -65,7 +88,7 @@ export const ManagementHub: React.FC<ManagementHubProps> = ({
   const renderContent = () => {
     switch (activeTab) {
       case 'DASHBOARD':
-        return <Dashboard cases={cases} onClose={onClose} />;
+        return <Dashboard cases={cases} users={users} onClose={onClose} />;
       case 'CALENDAR':
         return <CalendarModal cases={cases} onClose={onClose} />;
       case 'TASKS':
@@ -87,6 +110,18 @@ export const ManagementHub: React.FC<ManagementHubProps> = ({
             documentTemplates={documentTemplates}
             setDocumentTemplates={setDocumentTemplates}
             addSystemLog={addSystemLog}
+            systemSettings={systemSettings}
+            setSystemSettings={setSystemSettings}
+            systemTags={systemTags}
+            setSystemTags={setSystemTags}
+            commonDocs={commonDocs}
+            setCommonDocs={setCommonDocs}
+            agencies={agencies}
+            setAgencies={setAgencies}
+            whatsAppTemplates={whatsAppTemplates}
+            setWhatsAppTemplates={setWhatsAppTemplates}
+            workflowRules={workflowRules}
+            setWorkflowRules={setWorkflowRules}
         />;
       default:
         return null;

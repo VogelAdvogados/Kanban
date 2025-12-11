@@ -1,10 +1,10 @@
 
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Save, Clock, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
 import { Case, User as UserType } from '../types';
 import { VIEW_CONFIG } from '../constants';
 import { getPredictiveInsights, validateCPF, generateDiffLog } from '../utils';
+import { ConfirmationModal } from './ConfirmationModal';
 
 // Sub-components
 import { ClientInfo } from './case-modal/ClientInfo';
@@ -22,11 +22,13 @@ interface CaseModalProps {
   onSelectCase: (c: Case) => void; 
   onOpenWhatsApp?: (c: Case) => void; 
   onOpenDocumentGenerator?: (c: Case) => void;
+  commonDocs?: string[]; // New
 }
 
-export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isOpen, onClose, onSave, onOpenWhatsApp, onOpenDocumentGenerator }) => {
+export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isOpen, onClose, onSave, onOpenWhatsApp, onOpenDocumentGenerator, commonDocs }) => {
   const [formData, setFormData] = useState<Case>({ ...data, tags: data.tags || [] });
   const [pendingNote, setPendingNote] = useState('');
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   
   // Feedback System State
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success', message: string } | null>(null);
@@ -39,7 +41,7 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
       return getPredictiveInsights(allCases, data);
   }, [allCases, data]);
 
-  // Reset form when data prop changes deeply or modal opens
+  // Reset form ONLY when Modal OPENS or ID CHANGES (Switching cases), NOT on every data prop update (background sync)
   useEffect(() => {
     if (isOpen) {
         // Deep copy to break references
@@ -62,8 +64,9 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
         originalDataRef.current = JSON.parse(JSON.stringify(cleanData)); // Set baseline for diff with deep copy
         setPendingNote('');
         setFeedback(null);
+        setShowExitConfirmation(false);
     }
-  }, [data.id, isOpen]); 
+  }, [data.id, isOpen]); // CRITICAL: Only reset if ID changes or Modal Opens. Ignore shallow data updates.
 
   // Auto-clear feedback after 4 seconds
   useEffect(() => {
@@ -75,26 +78,32 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
 
   if (!isOpen) return null;
 
-  // Optimized Dirty Check
+  // Optimized Dirty Check using JSON comparison for robustness
   const hasUnsavedChanges = () => {
-      // Compare against the LATEST SAVED VERSION (originalDataRef), not the stale 'data' prop.
-      const original = originalDataRef.current;
-      
-      if (formData.clientName !== original.clientName) return true;
-      if (formData.cpf !== original.cpf) return true;
-      if (formData.phone !== original.phone) return true;
       if (pendingNote.trim().length > 0) return true;
       
-      // We rely on the save button for granular file/task changes
-      return false; 
+      // Compare current form data with original baseline (excluding volatile fields if any)
+      // Since we deep copied originalDataRef on mount, direct JSON comparison works well for identifying any field change
+      return JSON.stringify(formData) !== JSON.stringify(originalDataRef.current);
   };
 
-  const handleClose = () => {
+  const handleCloseRequest = () => {
     if (hasUnsavedChanges()) {
-      const confirmExit = window.confirm("Existem alterações não salvas. Deseja sair sem salvar?");
-      if (!confirmExit) return;
+      setShowExitConfirmation(true);
+    } else {
+      onClose();
     }
-    onClose();
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) {
+          handleCloseRequest();
+      }
+  };
+
+  const confirmExit = () => {
+      setShowExitConfirmation(false);
+      onClose();
   };
 
   const showFeedback = (message: string, type: 'error' | 'success' = 'error') => {
@@ -116,30 +125,41 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
     // 2. Generate Intelligent Log (Diff)
     let logMessage = generateDiffLog(originalDataRef.current, formData);
     
-    // Check if nothing changed but a note was added
-    if (logMessage === "Edição de detalhes." && pendingNote.trim()) {
+    if (logMessage === "" && pendingNote.trim()) {
         logMessage = "Nota adicionada.";
-    } else if (pendingNote.trim()) {
-        logMessage += " | Nota: " + pendingNote;
+    } 
+    
+    if (pendingNote.trim()) {
+        logMessage = logMessage ? `${logMessage} | Nota: ${pendingNote}` : `Nota: ${pendingNote}`;
+        
+        // Also manually append the note to history inside the object, in case updateCase relies on it
+        const newHistoryItem = { 
+            id: `h-note-save-${Date.now()}`, 
+            date: new Date().toISOString(), 
+            user: 'Eu', 
+            action: 'Nota Rápida', 
+            details: pendingNote 
+        };
+        formData.history = [...formData.history, newHistoryItem];
     }
 
-    // 3. Prepare Update
-    // ... history handled by App.tsx via onSave
+    // If still empty (no diff, no note), verify granular changes
+    if (!logMessage && !hasUnsavedChanges()) {
+        logMessage = "Salvamento manual.";
+    }
 
     // 4. Execute Save
     try {
         const finalData = { ...formData };
+        
         onSave(finalData, logMessage);
         
         // CRITICAL: Update the baseline reference to the new saved state
-        // This ensures subsequent saves don't re-log the same changes
         originalDataRef.current = JSON.parse(JSON.stringify(finalData));
         
-        // Show success
         showFeedback("Alterações salvas com sucesso!", 'success');
         setPendingNote('');
         
-        // Close modal automatically on save for smoother flow
         setTimeout(() => {
             onClose();
         }, 500);
@@ -154,9 +174,14 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
       setFormData(prev => ({ ...prev, ...updates }));
   };
 
-  // Immediate note addition (bypassing the main save button if needed, strictly for history chat)
+  // FIX: Immediate note addition capturing pending changes
   const handleAddNoteToState = (note: string) => {
-      // Create a temporary history item for display
+      if (!formData.clientName || formData.clientName.trim() === '') { 
+        showFeedback("Não é possível salvar notas sem Nome do Cliente.", 'error');
+        return; 
+      }
+
+      // 1. Create history item
       const newHistoryItem = { 
           id: `h-note-${Date.now()}`, 
           date: new Date().toISOString(), 
@@ -167,22 +192,33 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
       
       const newHistory = [...formData.history, newHistoryItem];
       
-      // We update form data locally
-      setFormData(prev => ({ 
-          ...prev, 
-          history: newHistory 
-      }));
+      // 2. Check for any pending form changes (THE FIX)
+      // We must log pending edits NOW or they are saved silently.
+      const diffLog = generateDiffLog(originalDataRef.current, formData);
       
-      // AND we trigger an immediate save to persist this note without needing to click "Save Changes"
-      // This is a UX choice: Chat/Notes usually save immediately.
-      onSave({ ...formData, history: newHistory }, ''); // Empty log message because the history item IS the log
-      originalDataRef.current = { ...originalDataRef.current, history: newHistory };
+      // 3. Prepare Log Message for App.tsx
+      // If there are field changes, pass them as the log message.
+      const appLogMessage = diffLog !== "" ? `Alterações via Nota: ${diffLog}` : "";
+
+      const stateToSave = { ...formData, history: newHistory };
+
+      // 4. Update UI
+      setFormData(stateToSave);
+      
+      // 5. Commit
+      onSave(stateToSave, appLogMessage);
+      
+      // 6. Update Baseline
+      originalDataRef.current = JSON.parse(JSON.stringify(stateToSave));
   };
 
   const viewConfig = VIEW_CONFIG[formData.view];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-0 md:p-4 animate-in fade-in zoom-in-95 duration-200">
+    <div 
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-0 md:p-4 animate-in fade-in zoom-in-95 duration-200"
+        onClick={handleBackdropClick} // Close on click outside
+    >
       <div className="bg-slate-100 w-full md:max-w-6xl h-[100dvh] md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 relative">
         
         {/* FEEDBACK POPUP (TOAST) */}
@@ -232,43 +268,33 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
                     </button>
                 )}
                 <div className="w-px h-8 bg-slate-200 mx-2"></div>
-                <button onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors" title="Fechar (Esc)">
+                <button onClick={handleCloseRequest} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors" title="Fechar (Esc)">
                     <X size={24} />
                 </button>
             </div>
         </div>
 
-        {/* MAIN CONTENT - SINGLE SCROLL VIEW */}
+        {/* MAIN CONTENT */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 kanban-scroll bg-slate-50/50 pb-20 md:pb-6">
-            
-            {/* 1. DADOS DE ACESSO RÁPIDO E FICHA COMPLETA */}
             <ClientInfo 
                 data={formData} 
                 onChange={updateFormData} 
                 onOpenWhatsApp={onOpenWhatsApp} 
             />
-
-            {/* 2. DADOS DO PROCESSO (TIMELINE) */}
             <CaseTimeline 
                 data={formData} 
                 onChange={updateFormData} 
             />
-
-            {/* 3. SPLIT VIEW: FILES & NOTES */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
-                
-                {/* LEFT: FILES & TAGS */}
                 <CaseFiles 
                     data={formData} 
                     onChange={updateFormData} 
+                    commonDocs={commonDocs} // New prop
                 />
-
-                {/* RIGHT: CHAT & HISTORY */}
                 <CaseHistory 
                     data={formData} 
                     onAddNote={handleAddNoteToState} 
                 />
-
             </div>
         </div>
 
@@ -292,6 +318,19 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
                 </button>
             </div>
         </div>
+
+        {/* EXIT CONFIRMATION MODAL */}
+        {showExitConfirmation && (
+            <ConfirmationModal 
+                title="Descartar alterações?"
+                description="Você fez alterações que ainda não foram salvas. Se sair agora, elas serão perdidas permanentemente."
+                confirmLabel="Sair sem Salvar"
+                cancelLabel="Continuar Editando"
+                onConfirm={confirmExit}
+                onCancel={() => setShowExitConfirmation(false)}
+                isDangerous={true}
+            />
+        )}
 
       </div>
     </div>

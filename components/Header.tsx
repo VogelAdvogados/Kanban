@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { ViewType, User, Notification, Case } from '../types';
-import { VIEW_CONFIG, VIEW_THEMES } from '../constants';
-import { Search, LogOut, ExternalLink, Bell, LayoutGrid, CheckSquare, Users, Calendar, BarChart2, Settings, Plus, ChevronDown, Menu } from 'lucide-react';
+import { VIEW_CONFIG, VIEW_THEMES, SYSTEM_TAGS } from '../constants';
+import { Search, LogOut, ExternalLink, Bell, LayoutGrid, CheckSquare, Users, Calendar, BarChart2, Settings, Plus, ChevronDown, Menu, Tag, Command } from 'lucide-react';
 import { NotificationsPanel } from './NotificationsPanel';
 
 interface HeaderProps {
@@ -17,8 +17,10 @@ interface HeaderProps {
   setResponsibleFilter: (id: string) => void;
   urgencyFilter: string;
   setUrgencyFilter: (val: string) => void;
+  tagFilter?: string; // New Tag Filter
+  setTagFilter?: (val: string) => void;
   onNewCase: () => void;
-  onOpenCmdK: () => void;
+  onOpenCmdK: () => void; // This will now open Global Search
   
   // Direct Actions
   onOpenDashboard: () => void;
@@ -38,7 +40,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   officeName, currentUser, onLogout, currentView, setCurrentView, searchTerm, setSearchTerm,
-  responsibleFilter, setResponsibleFilter, urgencyFilter, setUrgencyFilter,
+  responsibleFilter, setResponsibleFilter, urgencyFilter, setUrgencyFilter, tagFilter, setTagFilter,
   onNewCase, onOpenCmdK,
   onOpenDashboard, onOpenCalendar, onOpenTasks, onOpenClients, onOpenLogs, onOpenSettings,
   allCases, users, notifications, onMarkNotificationAsRead, onMarkAllNotificationsAsRead, onSelectCase
@@ -48,19 +50,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [notifOpen, setNotifOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
   
-  const [localSearch, setLocalSearch] = useState(searchTerm);
-
-  useEffect(() => {
-    setLocalSearch(searchTerm);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchTerm(localSearch);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [localSearch, setSearchTerm]);
-
   const EXTERNAL_LINKS = [
     { label: 'Meu INSS', url: 'https://meu.inss.gov.br/' },
     { label: 'SAG / INSS Digital', url: 'https://requerimento.inss.gov.br/' },
@@ -196,17 +185,14 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="hidden md:inline">Novo Caso</span>
                 </button>
 
-                {/* Search Compact (Moved Here) */}
-                <div className="relative hidden xl:block group">
-                     <input 
-                        type="text" 
-                        placeholder="Buscar..." 
-                        className="bg-blue-900/50 border border-blue-700 text-blue-100 text-xs rounded-full pl-8 pr-3 py-1.5 w-48 focus:w-64 transition-all outline-none focus:bg-blue-900 focus:border-blue-500 placeholder-blue-400"
-                        value={localSearch}
-                        onChange={(e) => setLocalSearch(e.target.value)}
-                     />
-                     <Search size={12} className="absolute left-2.5 top-2 text-blue-400" />
-                </div>
+                {/* SMART SEARCH TRIGGER */}
+                <button 
+                    onClick={onOpenCmdK}
+                    className="hidden xl:flex items-center gap-3 bg-blue-900/50 border border-blue-700 hover:bg-blue-900/80 hover:border-blue-500 text-blue-100 rounded-full pl-3 pr-4 py-1.5 w-64 transition-all group"
+                >
+                     <Search size={14} className="text-blue-400 group-hover:text-white" />
+                     <span className="text-xs flex-1 text-left opacity-80">Buscar contatos, tarefas...</span>
+                </button>
                 
                 <div className="h-6 w-px bg-blue-800 hidden md:block mx-1"></div>
             </div>
@@ -239,14 +225,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* --- 3. FILTER STRIP (Sub-header) --- */}
-        <div className="bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-4 text-xs shadow-sm z-30">
-             <div className="flex items-center gap-2 text-slate-500">
+        <div className="bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-4 text-xs shadow-sm z-30 overflow-x-auto">
+             <div className="flex items-center gap-2 text-slate-500 flex-shrink-0">
                 <Search size={14} />
-                <span className="font-bold uppercase text-[10px]">Filtros:</span>
+                <span className="font-bold uppercase text-[10px]">Filtros Rápidos:</span>
              </div>
              
              {/* Responsible Filter */}
-             <div className="relative group">
+             <div className="relative group flex-shrink-0">
                  <select 
                     value={responsibleFilter}
                     onChange={(e) => setResponsibleFilter(e.target.value)}
@@ -259,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
              </div>
 
              {/* Urgency Filter */}
-             <div className="relative group">
+             <div className="relative group flex-shrink-0">
                  <select 
                     value={urgencyFilter}
                     onChange={(e) => setUrgencyFilter(e.target.value)}
@@ -273,12 +259,30 @@ export const Header: React.FC<HeaderProps> = ({
                  <ChevronDown size={12} className="absolute right-2.5 top-2 text-slate-400 pointer-events-none"/>
              </div>
 
+             {/* TAGS FILTER (New) */}
+             {setTagFilter && (
+                 <div className="relative group flex-shrink-0">
+                     <select 
+                        value={tagFilter || ''}
+                        onChange={(e) => setTagFilter(e.target.value)}
+                        className="appearance-none bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-full px-3 py-1 pr-8 text-slate-600 font-medium outline-none cursor-pointer focus:ring-2 focus:ring-blue-100 transition-all pl-7"
+                     >
+                         <option value="">Todas as Etiquetas</option>
+                         {SYSTEM_TAGS.map(t => (
+                             <option key={t.id} value={t.label}>{t.label}</option>
+                         ))}
+                     </select>
+                     <Tag size={12} className="absolute left-2.5 top-2 text-slate-400 pointer-events-none"/>
+                     <ChevronDown size={12} className="absolute right-2.5 top-2 text-slate-400 pointer-events-none"/>
+                 </div>
+             )}
+
              <div className="flex-1"></div>
 
-             {(searchTerm || responsibleFilter || urgencyFilter) && (
+             {(searchTerm || responsibleFilter || urgencyFilter || tagFilter) && (
                  <button 
-                    onClick={() => { setSearchTerm(''); setResponsibleFilter(''); setUrgencyFilter(''); setLocalSearch(''); }}
-                    className="text-slate-400 hover:text-red-500 flex items-center gap-1 font-medium transition-colors"
+                    onClick={() => { setSearchTerm(''); setResponsibleFilter(''); setUrgencyFilter(''); if(setTagFilter) setTagFilter(''); }}
+                    className="text-slate-400 hover:text-red-500 flex items-center gap-1 font-medium transition-colors flex-shrink-0"
                  >
                      <LogOut size={12} className="rotate-180"/> Limpar Filtros
                  </button>

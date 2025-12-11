@@ -26,7 +26,7 @@ export const ClientDetails: React.FC<ClientDetailsProps> = ({ client, onClose, o
   const [cepError, setCepError] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Reset form when client changes
+  // Reset form when client changes or deep data updates
   useEffect(() => {
     const source = client.latestCase;
     setEditForm({
@@ -46,10 +46,11 @@ export const ClientDetails: React.FC<ClientDetailsProps> = ({ client, onClose, o
         addressNeighborhood: source.addressNeighborhood,
         addressCity: source.addressCity,
         addressState: source.addressState,
+        referral: source.referral, // Added referral
     });
     setHasChanges(false);
     setShowPassword(false);
-  }, [client.key]);
+  }, [client.key, client]); // Depend on client object to refresh on update
 
   const handleFormChange = (field: keyof Case, value: any) => {
       setEditForm(prev => ({ ...prev, [field]: value }));
@@ -258,6 +259,13 @@ export const ClientDetails: React.FC<ClientDetailsProps> = ({ client, onClose, o
                                 <option value="Viúvo(a)">Viúvo(a)</option>
                                 <option value="União Estável">União Estável</option>
                             </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Indicação / Referência</label>
+                            <input className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-100 outline-none"
+                                value={editForm.referral || ''} onChange={e => handleFormChange('referral', e.target.value)} 
+                                placeholder="Quem indicou este cliente?"
+                            />
                         </div>
                         <div>
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">RG</label>
