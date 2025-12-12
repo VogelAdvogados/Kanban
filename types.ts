@@ -45,6 +45,15 @@ export interface ThemeConfig {
     iconColor: string;
 }
 
+export interface AppTheme {
+    id: string;
+    label: string;
+    bgClass: string;
+    previewColor: string;
+    headerTop?: string;    // New: Color class for top bar
+    headerBottom?: string; // New: Color class for bottom nav
+}
+
 // NEW: INSS Agency Model
 export interface INSSAgency {
     id: string;
@@ -211,6 +220,7 @@ export interface Case {
   clientName: string;
   cpf: string;
   phone: string;
+  email?: string; 
   birthDate?: string; 
   
   rg?: string;
@@ -254,7 +264,7 @@ export interface Case {
   protocolNumber?: string; 
   protocolDate?: string; 
   
-  exigencyDetails?: string; // NOVO: O que o INSS pediu na exigência?
+  exigencyDetails?: string; 
 
   benefitNumber?: string; 
   benefitDate?: string; 
@@ -282,18 +292,18 @@ export interface Case {
 
   // Module Auxilio-Doença (Incapacidade)
   periciaDate?: string;
-  periciaTime?: string; // NEW
-  periciaLocation?: string; // NEW
-  strategyType?: 'ATESTMED' | 'PRESENCIAL'; // NEW
+  periciaTime?: string; 
+  periciaLocation?: string; 
+  strategyType?: 'ATESTMED' | 'PRESENCIAL'; 
   
   // Module Pensão (Death)
-  deceasedName?: string; // Nome do Instituidor
-  deceasedDate?: string; // Data do Óbito
+  deceasedName?: string; 
+  deceasedDate?: string; 
   
   // Module Tempo/Rural
-  contributionTimeYears?: number; // Tempo apurado (Anos)
-  contributionTimeMonths?: number; // Tempo apurado (Meses)
-  ruralProofStart?: string; // Data início prova rural
+  contributionTimeYears?: number; 
+  contributionTimeMonths?: number; 
+  ruralProofStart?: string; 
 
   dcbDate?: string; 
   
@@ -302,9 +312,12 @@ export interface Case {
   urgency: UrgencyLevel;
   isExtension?: boolean;
   
-  // NEW: Manual Confidence Rating (0-5)
+  // Manual Confidence Rating (0-5)
   confidenceRating?: number;
   
+  // Algorithmic Score (Calculated on runtime, but can be stored for sorting)
+  healthScore?: number; 
+
   history: CaseHistory[];
 }
 
@@ -319,5 +332,13 @@ export interface User {
   name: string;
   avatarInitials: string;
   role: 'ADMIN' | 'LAWYER' | 'SECRETARY' | 'FINANCIAL';
-  color?: string; 
+  color?: string;
+  email?: string;
+  password?: string; // Simulação
+  themePref?: string; // ID do Tema
+}
+
+// NEW: Search Index Interface
+export interface SearchIndex {
+    [token: string]: string[]; // Token -> List of Case IDs
 }

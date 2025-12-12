@@ -1,188 +1,41 @@
 
-import { ColumnDefinition, Case, User, ViewType, TransitionRule, Task, SmartAction, WhatsAppTemplate, ThemeConfig, DocumentTemplate, WorkflowRule, SystemTag, INSSAgency } from './types';
+// ... (imports remain unchanged)
+import { ColumnDefinition, Case, User, ViewType, TransitionRule, Task, SmartAction, WhatsAppTemplate, ThemeConfig, DocumentTemplate, WorkflowRule, SystemTag, INSSAgency, AppTheme } from './types';
 import { LayoutDashboard, Stethoscope, Scale, FileText, Gavel, Archive, ArrowRight, RefreshCw, AlertTriangle, BadgeDollarSign, Siren, Search, FileCheck, Send, Calculator, Calendar, CheckCircle, XCircle, Plus, BookOpen, Coins, FileSearch, TrendingUp } from 'lucide-react';
 
-// --- USER IDENTITY COLORS ---
-export const USER_COLORS = [
-  '#3b82f6', // Blue
-  '#8b5cf6', // Violet
-  '#ec4899', // Pink
-  '#f43f5e', // Rose
-  '#f97316', // Orange
-  '#eab308', // Yellow
-  '#10b981', // Emerald
-  '#06b6d4', // Cyan
-  '#6366f1', // Indigo
-  '#64748b', // Slate
-  '#14b8a6', // Teal
-  '#d946ef', // Fuchsia
-];
-
-// --- Users ---
-export const USERS: User[] = [
-  { id: 'u1', name: 'Dr. Maurícius', avatarInitials: 'MR', role: 'LAWYER', color: '#8b5cf6' }, // Violet
-  { id: 'u2', name: 'Dra. Ana', avatarInitials: 'AN', role: 'LAWYER', color: '#ec4899' }, // Pink
-  { id: 'u3', name: 'Secretaria', avatarInitials: 'SEC', role: 'SECRETARY', color: '#64748b' }, // Slate
-  { id: 'u4', name: 'Financeiro', avatarInitials: 'FIN', role: 'FINANCIAL', color: '#10b981' }, // Emerald
-];
-
-// --- INSS AGENCIES (DEFAULT LIST) ---
-export const DEFAULT_INSS_AGENCIES: INSSAgency[] = [
-    { id: 'aps_1', name: 'Agência INSS - CRUZ ALTA', address: 'Rua Voluntários da Pátria, 500, Centro' },
-    { id: 'aps_2', name: 'Agência INSS - IJUÍ', address: 'Rua 15 de Novembro, 200' },
-    { id: 'aps_3', name: 'Agência INSS - PANAMBI', address: 'Rua da Holanda, 55' },
-    { id: 'aps_4', name: 'Agência INSS - IBIRUBÁ', address: 'Rua General Osório, 800' },
-    { id: 'aps_5', name: 'Agência INSS - SANTO ÂNGELO', address: 'Rua Marechal Floriano, 1000' },
-    { id: 'aps_6', name: 'Agência INSS - CARAZINHO', address: 'Av. Flores da Cunha, 250' },
-    { id: 'aps_7', name: 'Agência INSS - PASSO FUNDO', address: 'Rua Paissandú, 100' }
-];
-
-// --- SYSTEM TAGS (Initial Defaults) ---
-export const DEFAULT_SYSTEM_TAGS: SystemTag[] = [
-    { id: 'tag_liminar', label: 'Liminar Deferida', colorBg: 'bg-emerald-100', colorText: 'text-emerald-700' },
-    { id: 'tag_aguarda_cli', label: 'Aguardando Cliente', colorBg: 'bg-orange-100', colorText: 'text-orange-700', rules: [{ type: 'COLUMN_CONTAINS', value: 'docs' }] },
-    { id: 'tag_prioridade', label: 'Prioridade Idoso', colorBg: 'bg-purple-100', colorText: 'text-purple-700', rules: [{ type: 'AGE_GREATER', value: 60 }] },
-    { id: 'tag_rural', label: 'Rural', colorBg: 'bg-amber-100', colorText: 'text-amber-800' },
-    { id: 'tag_loas', label: 'LOAS', colorBg: 'bg-blue-100', colorText: 'text-blue-700', rules: [{ type: 'BENEFIT_TYPE', value: '87' }, { type: 'BENEFIT_TYPE', value: '88' }] },
-    { id: 'tag_risco', label: 'Risco de Indeferimento', colorBg: 'bg-red-100', colorText: 'text-red-700' },
-    { id: 'tag_revisao', label: 'Revisão', colorBg: 'bg-indigo-100', colorText: 'text-indigo-700' },
-    { id: 'tag_concluido', label: 'CONCEDIDO', colorBg: 'bg-emerald-500', colorText: 'text-white' },
-    { id: 'tag_negado', label: 'INDEFERIDO', colorBg: 'bg-red-500', colorText: 'text-white' },
-    { id: 'tag_receber', label: 'A RECEBER', colorBg: 'bg-emerald-100', colorText: 'text-emerald-800' },
-    { id: 'tag_ms', label: 'MANDADO DE SEGURANÇA', colorBg: 'bg-red-100', colorText: 'text-red-800' }, // Nova Tag
-];
-
-// Keep this for backwards compatibility if needed, but components should use state
-export const SYSTEM_TAGS = DEFAULT_SYSTEM_TAGS;
-
-// --- Benefit Types (Codes) ---
-export const BENEFIT_OPTIONS = [
-  { code: '31', label: '31 - Auxílio-Doença (Incapacidade Temp.)' },
-  { code: '41', label: '41 - Aposentadoria por Idade' },
-  { code: '42', label: '42 - Apos. Tempo de Contribuição' },
-  { code: '46', label: '46 - Apos. Especial' },
-  { code: '57', label: '57 - Apos. Professor' },
-  { code: '21', label: '21 - Pensão por Morte' },
-  { code: '25', label: '25 - Auxílio-Reclusão' },
-  { code: '87', label: '87 - LOAS (Deficiente)' },
-  { code: '88', label: '88 - LOAS (Idoso)' },
-];
-
-// --- DOCUMENTOS COMUNS (Checklist) ---
-export const COMMON_DOCUMENTS = [
-    "RG / CNH (Identidade)",
-    "CPF",
-    "Comprovante de Residência Atual",
-    "Carteira de Trabalho (CTPS)",
-    "Extrato CNIS",
-    "Senha do Gov.br",
-    "Laudos Médicos Atuais",
-    "Receituários / Exames",
-    "PPP (Perfil Profissiográfico)",
-    "Certidão de Casamento/Nascimento",
-    "Contrato de Honorários Assinado",
-    "Procuração Assinada"
-];
-
-// --- DOCUMENT VARIABLES (For Generator) ---
-export const DOCUMENT_VARIABLES = [
-    { key: '{NOME_CLIENTE}', label: 'Nome do Cliente' },
-    { key: '{CPF}', label: 'CPF' },
-    { key: '{RG}', label: 'RG' },
-    { key: '{PIS}', label: 'PIS' },
-    { key: '{TELEFONE}', label: 'Telefone' },
-    { key: '{ESTADO_CIVIL}', label: 'Estado Civil' },
-    { key: '{DATA_NASCIMENTO}', label: 'Data de Nascimento' },
-    { key: '{NOME_MAE}', label: 'Nome da Mãe' },
-    // Endereço Granular
-    { key: '{ENDERECO_COMPLETO}', label: 'Endereço (Completo Formatado)' },
-    { key: '{RUA}', label: 'Rua/Logradouro' },
-    { key: '{NUMERO}', label: 'Número' },
-    { key: '{BAIRRO}', label: 'Bairro' },
-    { key: '{CIDADE}', label: 'Cidade' },
-    { key: '{UF}', label: 'UF' },
-    { key: '{CEP}', label: 'CEP' },
-    // Processo
-    { key: '{NB}', label: 'Número do Benefício (NB)' },
-    { key: '{NPU}', label: 'Processo Judicial (NPU)' },
-    // Datas e Escritório
-    { key: '{DATA_ATUAL}', label: 'Data de Hoje (Extenso)' },
-    { key: '{DIA}', label: 'Dia Atual (DD)' },
-    { key: '{MES}', label: 'Mês Atual (Nome)' },
-    { key: '{ANO}', label: 'Ano Atual (AAAA)' },
-    { key: '{ADVOGADO_RESPONSAVEL}', label: 'Advogado Responsável' },
-];
-
-// --- DEFAULT DOCUMENT TEMPLATES ---
-export const DEFAULT_DOCUMENT_TEMPLATES: DocumentTemplate[] = [
-    // ... (templates mantidos como estão)
-    {
-        id: 'tpl_procuracao_ad_judicia',
-        title: 'Procuração Ad Judicia',
-        category: 'PROCURACAO',
-        lastModified: new Date().toISOString(),
-        content: `
-        <h3 style="text-align: center;"><strong>PROCURAÇÃO AD JUDICIA ET EXTRA</strong></h3>
-        <p>&nbsp;</p>
-        <p><strong>OUTORGANTE:</strong> <strong>{NOME_CLIENTE}</strong>, nacionalidade brasileira, {ESTADO_CIVIL}, portador(a) do RG nº {RG} e CPF nº {CPF}, residente e domiciliado(a) na {ENDERECO_COMPLETO}.</p>
-        <p>&nbsp;</p>
-        <p><strong>OUTORGADO: {ADVOGADO_RESPONSAVEL}</strong>, brasileiro, advogado, inscrito na OAB sob o nº 00.000, com escritório profissional à Rua Exemplo, nº 100, Centro.</p>
-        <p>&nbsp;</p>
-        <p><strong>PODERES:</strong> Pelo presente instrumento particular de procuração, o(a) OUTORGANTE nomeia e constitui o(a) OUTORGADO(A) seu(sua) bastante procurador(a), conferindo-lhe amplos poderes para o foro em geral, com a cláusula "ad judicia et extra", em qualquer Juízo, Instância ou Tribunal, podendo propor contra quem de direito, as ações competentes e defendê-lo(a) nas contrárias, seguindo umas e outras, até final decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda, poderes especiais para receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, receber, dar quitação, firmar compromisso e substabelecer esta em outrem, com ou sem reservas de iguais poderes, para agir em conjunto ou separadamente, dando tudo por bom, firme e valioso, especialmente para fins de <strong>REQUERIMENTO DE BENEFÍCIO PREVIDENCIÁRIO E AÇÃO JUDICIAL PREVIDENCIÁRIA</strong>.</p>
-        <p>&nbsp;</p>
-        <p style="text-align: center;">{CIDADE}, {DATA_ATUAL}.</p>
-        <p>&nbsp;</p>
-        <p>&nbsp;</p>
-        <p style="text-align: center;">_________________________________________________</p>
-        <p style="text-align: center;"><strong>{NOME_CLIENTE}</strong></p>
-        `
-    },
-];
-
-// --- WHATSAPP TEMPLATES (Updated with Better Defaults) ---
-export const WHATSAPP_TEMPLATES: WhatsAppTemplate[] = [
-    {
-        id: 't_docs_pendencia',
-        label: 'Cobrança de Documentos',
-        category: 'DOCUMENTOS',
-        text: 'Olá *{NOME}*, tudo bem? 👋\n\nSou da equipe do Rambo Prev. Estamos analisando seu processo e notamos que faltam alguns documentos importantes para darmos andamento:\n\n{LISTA_DOCS}\n\n📸 *Você poderia nos enviar fotos legíveis desses documentos por aqui?*\n\nQuanto antes recebermos, mais rápido será o protocolo!'
-    },
-    {
-        id: 't_geral',
-        label: 'Boas Vindas',
-        category: 'GERAL',
-        text: 'Olá *{NOME}*, seja bem-vindo ao Rambo Prev! 🏛️\n\nÉ um prazer ter você conosco. Já iniciamos o cadastro do seu processo em nosso sistema sob o número de controle *{ID_INTERNO}*.\n\nQualquer dúvida sobre o andamento, pode nos chamar diretamente por este WhatsApp. Estamos à disposição!'
-    },
-    {
-        id: 't_pericia',
-        label: 'Aviso de Perícia',
-        category: 'PERICIA',
-        text: '⚠️ *AVISO IMPORTANTE - PERÍCIA AGENDADA*\n\nOlá *{NOME}*, sua perícia médica no INSS foi marcada!\n\n📅 *Data:* {DATA_PERICIA}\n📍 *Local:* {LOCAL_PERICIA}\n\n🛑 *Chegue com 30 minutos de antecedência.*\n📂 Leve seus documentos pessoais (RG/CPF) e todos os exames/laudos médicos originais.'
-    },
-    {
-        id: 't_resultado_aprovado',
-        label: 'Resultado: Aprovado',
-        category: 'RESULTADO',
-        text: '🎉 *ÓTIMA NOTÍCIA {NOME}!* 🎉\n\nTemos o prazer de informar que seu benefício foi *CONCEDIDO* pelo INSS!\n\n📄 *Número do Benefício:* {NB}\n\nEntre em contato conosco ou venha até o escritório para agendarmos o recebimento e passarmos os próximos passos. Parabéns!'
-    },
-    {
-        id: 't_resultado_negado',
-        label: 'Resultado: Indeferido',
-        category: 'RESULTADO',
-        text: 'Olá *{NOME}*. Recebemos o resultado da análise administrativa.\n\nInfelizmente, o INSS negou o pedido inicial. 😕\n\nMas não se preocupe! 🛡️ Nossa equipe jurídica já está analisando o motivo da negativa para entrarmos com o recurso ou ação judicial o mais rápido possível. Em breve entraremos em contato para explicar a estratégia.'
-    },
-    {
-        id: 't_aniversario',
-        label: 'Aniversário',
-        category: 'GERAL',
-        text: '🎈 *Feliz Aniversário, {NOME}!* 🎈\n\nA equipe Rambo Prev deseja um dia repleto de alegria, saúde e realizações para você e sua família.\n\nConte sempre conosco para buscar seus direitos! Um grande abraço.'
-    }
+// --- APP THEMES (PERSONALIZATION) ---
+export const APP_THEMES: AppTheme[] = [
+    { id: 'default', label: 'Padrão (Dinâmico)', bgClass: '', previewColor: '#e2e8f0', headerTop: 'bg-[#f0f2f5]', headerBottom: 'bg-[#1e3a8a]' },
+    
+    // Clean / Professional
+    { id: 'slate', label: 'Executivo (Slate)', bgClass: 'bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300', previewColor: '#64748b', headerTop: 'bg-slate-100', headerBottom: 'bg-slate-800' },
+    { id: 'gray', label: 'Minimalista (Gray)', bgClass: 'bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200', previewColor: '#9ca3af', headerTop: 'bg-gray-100', headerBottom: 'bg-gray-700' },
+    { id: 'white', label: 'Papel (White)', bgClass: 'bg-slate-50', previewColor: '#ffffff', headerTop: 'bg-white', headerBottom: 'bg-slate-900' },
+    
+    // Blues / Cool
+    { id: 'ocean', label: 'Oceano (Ocean)', bgClass: 'bg-gradient-to-br from-cyan-50 via-cyan-100 to-blue-200', previewColor: '#22d3ee', headerTop: 'bg-cyan-50', headerBottom: 'bg-cyan-700' },
+    { id: 'sky', label: 'Céu (Sky)', bgClass: 'bg-gradient-to-br from-sky-50 via-sky-100 to-indigo-100', previewColor: '#38bdf8', headerTop: 'bg-sky-50', headerBottom: 'bg-sky-700' },
+    { id: 'royal', label: 'Royal Blue', bgClass: 'bg-gradient-to-br from-blue-100 via-blue-200 to-indigo-300', previewColor: '#4f46e5', headerTop: 'bg-indigo-50', headerBottom: 'bg-indigo-800' },
+    
+    // Nature / Green
+    { id: 'mint', label: 'Menta (Mint)', bgClass: 'bg-gradient-to-br from-emerald-50 via-teal-100 to-emerald-200', previewColor: '#34d399', headerTop: 'bg-emerald-50', headerBottom: 'bg-teal-700' },
+    { id: 'forest', label: 'Floresta (Green)', bgClass: 'bg-gradient-to-br from-green-50 via-green-100 to-green-200', previewColor: '#4ade80', headerTop: 'bg-green-50', headerBottom: 'bg-green-800' },
+    
+    // Warm
+    { id: 'sunset', label: 'Pôr do Sol (Sunset)', bgClass: 'bg-gradient-to-br from-orange-50 via-amber-100 to-orange-200', previewColor: '#fb923c', headerTop: 'bg-orange-50', headerBottom: 'bg-orange-800' },
+    { id: 'peach', label: 'Pêssego (Peach)', bgClass: 'bg-gradient-to-br from-orange-50 via-red-50 to-rose-100', previewColor: '#fda4af', headerTop: 'bg-rose-50', headerBottom: 'bg-rose-800' },
+    
+    // Creative / Purple
+    { id: 'lavender', label: 'Lavanda (Purple)', bgClass: 'bg-gradient-to-br from-violet-50 via-purple-100 to-fuchsia-100', previewColor: '#c084fc', headerTop: 'bg-violet-50', headerBottom: 'bg-purple-800' },
+    { id: 'berry', label: 'Berry (Pink)', bgClass: 'bg-gradient-to-br from-pink-50 via-pink-100 to-rose-200', previewColor: '#ec4899', headerTop: 'bg-pink-50', headerBottom: 'bg-pink-800' },
+    { id: 'midnight', label: 'Meia Noite (Dark)', bgClass: 'bg-gradient-to-br from-slate-200 via-blue-200 to-indigo-300', previewColor: '#1e3a8a', headerTop: 'bg-slate-200', headerBottom: 'bg-slate-950' }, 
+    { id: 'gold', label: 'Luxo (Gold)', bgClass: 'bg-gradient-to-br from-yellow-50 via-amber-100 to-yellow-200', previewColor: '#facc15', headerTop: 'bg-amber-50', headerBottom: 'bg-amber-800' },
 ];
 
 // --- THEME CONFIGURATION (Colors per View) ---
 export const VIEW_THEMES: Record<ViewType, ThemeConfig> = {
   ADMIN: {
-    bgGradient: 'from-slate-100 to-blue-50',
+    bgGradient: 'from-slate-50 via-white to-blue-50/30',
     primary: 'text-slate-800',
     secondary: 'text-slate-500',
     accent: 'border-blue-200',
@@ -190,7 +43,7 @@ export const VIEW_THEMES: Record<ViewType, ThemeConfig> = {
     iconColor: 'text-blue-500'
   },
   AUX_DOENCA: {
-    bgGradient: 'from-orange-50 to-amber-50',
+    bgGradient: 'from-orange-50/50 via-white to-amber-50/30',
     primary: 'text-orange-900',
     secondary: 'text-orange-600',
     accent: 'border-orange-200',
@@ -198,7 +51,7 @@ export const VIEW_THEMES: Record<ViewType, ThemeConfig> = {
     iconColor: 'text-orange-500'
   },
   MESA_DECISAO: {
-    bgGradient: 'from-fuchsia-50 to-pink-50',
+    bgGradient: 'from-fuchsia-50/50 via-white to-pink-50/30',
     primary: 'text-fuchsia-900',
     secondary: 'text-fuchsia-600',
     accent: 'border-fuchsia-200',
@@ -206,7 +59,7 @@ export const VIEW_THEMES: Record<ViewType, ThemeConfig> = {
     iconColor: 'text-fuchsia-500'
   },
   RECURSO_ADM: {
-    bgGradient: 'from-indigo-50 to-violet-50',
+    bgGradient: 'from-indigo-50/50 via-white to-violet-50/30',
     primary: 'text-indigo-900',
     secondary: 'text-indigo-600',
     accent: 'border-indigo-200',
@@ -214,7 +67,7 @@ export const VIEW_THEMES: Record<ViewType, ThemeConfig> = {
     iconColor: 'text-indigo-500'
   },
   JUDICIAL: {
-    bgGradient: 'from-violet-50 to-purple-50',
+    bgGradient: 'from-violet-50/50 via-white to-purple-50/30',
     primary: 'text-violet-900',
     secondary: 'text-violet-600',
     accent: 'border-violet-200',
@@ -222,7 +75,7 @@ export const VIEW_THEMES: Record<ViewType, ThemeConfig> = {
     iconColor: 'text-violet-500'
   },
   ARCHIVED: {
-    bgGradient: 'from-slate-200 to-slate-300',
+    bgGradient: 'from-slate-100 via-slate-50 to-slate-200/50',
     primary: 'text-slate-800',
     secondary: 'text-slate-600',
     accent: 'border-slate-300',
@@ -249,52 +102,76 @@ export const JUDICIAL_START_TASKS: Task[] = [
   { id: 't4', text: 'Baixar Processo Administrativo (Cópia Integral)', completed: false },
 ];
 
-// --- WORKFLOW RULES (DEFAULT SET) ---
-export const DEFAULT_WORKFLOW_RULES: WorkflowRule[] = [
-    // Regra 1: Entrou em Montagem -> Checklist de Documentos
+// --- WORKFLOW TEMPLATES (ROBÔS) ---
+export const AUTOMATION_TEMPLATES = [
     {
-        id: 'wr_def_1',
-        name: 'Checklist de Montagem',
-        isActive: true,
+        name: 'Robô de Triagem Inicial',
+        description: 'Cria lista de documentos básicos (RG, CPF, CNIS) ao iniciar um caso.',
         trigger: 'COLUMN_ENTER',
-        targetColumnId: 'adm_montagem',
+        targetColumnId: 'adm_triagem',
         conditions: [],
         actions: [
-            { id: 'wa_1', type: 'ADD_TASK', payload: 'Digitalizar RG e CPF' },
-            { id: 'wa_2', type: 'ADD_TASK', payload: 'Gerar Procuração' },
-            { id: 'wa_3', type: 'ADD_TASK', payload: 'Assinar Contrato' }
+            { type: 'ADD_TASK', payload: 'Coletar RG, CPF e Comp. Residência' },
+            { type: 'ADD_TASK', payload: 'Verificar Extrato CNIS e Qualidade de Segurado' },
+            { type: 'ADD_TASK', payload: 'Gerar Procuração e Contrato' }
         ]
     },
-    // Regra 2: Entrou em Triagem de Recurso -> Tarefas de Redação
     {
-        id: 'wr_def_2',
-        name: 'Fluxo de Recurso',
-        isActive: true,
+        name: 'Robô de Recurso (Indeferido)',
+        description: 'Define tarefas de redação e estratégia quando um processo chega na fase de Recurso.',
         trigger: 'COLUMN_ENTER',
         targetColumnId: 'rec_triagem',
         conditions: [],
         actions: [
-            { id: 'wa_4', type: 'ADD_TASK', payload: 'Analisar motivo do indeferimento' },
-            { id: 'wa_5', type: 'ADD_TASK', payload: 'Redigir minuta do recurso' }
+            { type: 'ADD_TASK', payload: 'Baixar Cópia Integral do PA' },
+            { type: 'ADD_TASK', payload: 'Analisar motivo do indeferimento' },
+            { type: 'ADD_TASK', payload: 'Redigir minuta do Recurso Ordinário' }
         ]
     },
-    // Regra 3: Bloqueio de Senha Gov no Protocolo
     {
-        id: 'wr_def_3',
-        name: 'Bloqueio Sem Senha Gov',
-        isActive: true,
+        name: 'Trava de Senha Gov',
+        description: 'Impede que o processo avance para "Protocolo" se não tiver a Senha Gov cadastrada.',
         trigger: 'COLUMN_ENTER',
         targetColumnId: 'adm_protocolo',
         conditions: [
-            { id: 'wc_1', type: 'FIELD_EMPTY', value: 'govPassword' }
+            { type: 'FIELD_EMPTY', value: 'govPassword' }
         ],
         actions: [
-            { id: 'wa_6', type: 'BLOCK_MOVE', payload: 'A senha do Gov.br é obrigatória para protocolar o pedido.' }
+            { type: 'BLOCK_MOVE', payload: 'A senha do Gov.br é obrigatória para protocolar o pedido.' }
+        ]
+    },
+    {
+        name: 'Alerta Prioridade Idoso',
+        description: 'Marca automaticamente com tag "Prioridade" se o cliente tiver +60 anos.',
+        trigger: 'COLUMN_ENTER',
+        targetColumnId: 'adm_montagem',
+        conditions: [
+            { type: 'AGE_GREATER', value: 60 }
+        ],
+        actions: [
+            { type: 'ADD_TAG', payload: 'Prioridade Idoso' },
+            { type: 'SET_URGENCY', payload: 'HIGH' }
+        ]
+    },
+    {
+        name: 'Robô Judicial (Petição)',
+        description: 'Cria tarefas para ajuizamento da ação ao entrar na fase judicial.',
+        trigger: 'COLUMN_ENTER',
+        targetColumnId: 'jud_triagem',
+        conditions: [],
+        actions: [
+            { type: 'ADD_TASK', payload: 'Coletar Procuração Judicial' },
+            { type: 'ADD_TASK', payload: 'Elaborar Petição Inicial' },
+            { type: 'ADD_TASK', payload: 'Calcular Valor da Causa' }
         ]
     }
 ];
 
-export const AUTOMATION_RULES = []; // Deprecated in favor of Workflow Rules, kept empty to prevent crash
+// --- WORKFLOW RULES (DEFAULT SET) ---
+export const DEFAULT_WORKFLOW_RULES: WorkflowRule[] = [
+    // Instanciação dos Templates como regras ativas padrão
+    { ...AUTOMATION_TEMPLATES[0], id: 'wr_def_1', isActive: true, conditions: [], actions: AUTOMATION_TEMPLATES[0].actions.map(a => ({...a, id: 'wa_1'})) } as any
+];
 
 // --- SUGGESTED ACTIONS (The "Brain" of the Facilitator) ---
 export const SUGGESTED_ACTIONS: Record<string, { label: string, icon: any, actionType: 'MOVE' | 'LINK' | 'TASK' | 'WHATSAPP', target?: string, urgency?: string, url?: string }> = {
@@ -312,7 +189,7 @@ export const SUGGESTED_ACTIONS: Record<string, { label: string, icon: any, actio
     'aux_chegada': { label: 'Agendar Perícia', icon: Calendar, actionType: 'MOVE', target: 'aux_protocolo' },
     'aux_pericia': { label: 'Consultar Laudo', icon: FileText, actionType: 'MOVE', target: 'aux_aguarda_resultado' },
     'aux_aguarda_resultado': { label: 'Ver Resultado', icon: Search, actionType: 'MOVE', target: 'aux_ativo' },
-    'aux_ativo': { label: 'Calcular RMI', icon: Calculator, actionType: 'TASK' },
+    'aux_ativo': { label: 'Checar DCB / PP', icon: RefreshCw, actionType: 'TASK' }, // UPDATE
     'aux_prorrogacao': { label: 'Checar Prorrogação', icon: RefreshCw, actionType: 'LINK', url: 'https://meu.inss.gov.br/' },
     'aux_indeferido': { label: 'Recorrer / Judicial', icon: Scale, actionType: 'MOVE', target: 'zone_mesa_decisao' },
 
@@ -327,6 +204,8 @@ export const SUGGESTED_ACTIONS: Record<string, { label: string, icon: any, actio
     'jud_triagem': { label: 'Ajuizar Ação', icon: Scale, actionType: 'MOVE', target: 'jud_ajuizada' },
     'jud_coleta': { label: 'Cobrar Docs', icon: Send, actionType: 'WHATSAPP' },
     'jud_montagem': { label: 'Ajuizar Ação', icon: Scale, actionType: 'MOVE', target: 'jud_ajuizada' },
+    'jud_ajuizada': { label: 'Agendar Perícia Jud.', icon: Calendar, actionType: 'MOVE', target: 'jud_pericia' }, // Updated
+    'jud_pericia': { label: 'Ver Laudo', icon: Search, actionType: 'LINK', url: 'https://eproc.trf4.jus.br/' }, // New
 };
 
 
@@ -451,7 +330,16 @@ export const SMART_ACTIONS_CONFIG: Record<string, { title: string, description: 
       title: 'Ação em Andamento',
       description: 'Processo judicial ativo.',
       actions: [
-          { label: 'Consultar E-Proc/PJE', targetView: 'JUDICIAL', targetColumnId: 'jud_ajuizada', icon: Search, colorClass: 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50', urgency: 'NORMAL', url: 'https://eproc.trf4.jus.br/' }
+          { label: 'Consultar E-Proc/PJE', targetView: 'JUDICIAL', targetColumnId: 'jud_ajuizada', icon: Search, colorClass: 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50', urgency: 'NORMAL', url: 'https://eproc.trf4.jus.br/' },
+          { label: 'Agendar Perícia Judicial', targetView: 'JUDICIAL', targetColumnId: 'jud_pericia', icon: Calendar, colorClass: 'bg-orange-500 text-white hover:bg-orange-600', urgency: 'HIGH' } // New Action
+      ]
+  },
+  'JUDICIAL_jud_pericia': {
+      title: 'Perícia Judicial',
+      description: 'Aguardando data ou realização da perícia.',
+      actions: [
+          { label: 'Confirmar Data/Hora', targetView: 'JUDICIAL', targetColumnId: 'jud_pericia', icon: Calendar, colorClass: 'bg-orange-600 text-white hover:bg-orange-700', urgency: 'HIGH' },
+          { label: 'Avisar Cliente (Kit Perícia)', targetView: 'JUDICIAL', targetColumnId: 'jud_pericia', icon: Send, colorClass: 'bg-green-600 text-white hover:bg-green-700', urgency: 'NORMAL' }
       ]
   },
 
@@ -575,6 +463,7 @@ export const JUDICIAL_COLUMNS: ColumnDefinition[] = [
   { id: 'jud_coleta', title: 'Coleta Docs', color: 'border-red-400' }, // Highlighted
   { id: 'jud_montagem', title: 'Montagem', color: 'border-purple-600' },
   { id: 'jud_ajuizada', title: 'Ação Ajuizada', color: 'border-blue-600' },
+  { id: 'jud_pericia', title: 'Perícia Judicial', color: 'border-orange-500' }, // NEW: Judicial Expertise
   // Zones
   { id: 'zone_mesa_decisao', title: 'Mesa de Decisão', color: 'border-fuchsia-500' },
   { id: 'zone_admin', title: 'Enviar p/ Admin', color: 'border-slate-500' },
@@ -597,8 +486,7 @@ export const COLUMNS_BY_VIEW: Record<ViewType, ColumnDefinition[]> = {
   ARCHIVED: ARCHIVED_COLUMNS,
 };
 
-// --- LOGIC RULES (TRANSITIONS) ---
-
+// --- TRANSITION RULES ---
 export const TRANSITION_RULES: TransitionRule[] = [
   // Pendências e Coleta Docs (Qualquer Origem)
   { from: '*', to: 'adm_docs', type: 'PENDENCY' },
@@ -611,8 +499,9 @@ export const TRANSITION_RULES: TransitionRule[] = [
   // Prorrogação (Pede Protocolo)
   { from: '*', to: 'aux_prorrogacao', type: 'PROTOCOL_INSS' },
 
-  // Perícia Agendada (Pede Protocolo/Data)
+  // Perícia Agendada (Pede Protocolo/Data) - Now includes Judicial
   { from: '*', to: 'aux_pericia', type: 'PROTOCOL_INSS' },
+  { from: '*', to: 'jud_pericia', type: 'PROTOCOL_INSS' }, // NEW
 
   // Exigência (Qualquer Origem) -> Garante Popup
   { from: '*', to: 'adm_exigencia', type: 'DEADLINE' },
@@ -631,7 +520,162 @@ export const TRANSITION_RULES: TransitionRule[] = [
   { from: 'rec_junta', to: 'rec_producao', type: 'APPEAL_RETURN' },
 ];
 
-// --- Initial Mock Data ---
+export const BENEFIT_OPTIONS = [
+  { code: '31', label: '31 - Auxílio por Incapacidade Temporária' },
+  { code: '32', label: '32 - Aposentadoria por Incapacidade Permanente' },
+  { code: '91', label: '91 - Auxílio Acidentário' },
+  { code: '92', label: '92 - Aposentadoria Acidentária' },
+  { code: '41', label: '41 - Aposentadoria por Idade' },
+  { code: '42', label: '42 - Aposentadoria por Tempo de Contribuição' },
+  { code: '46', label: '46 - Aposentadoria Especial' },
+  { code: '21', label: '21 - Pensão por Morte' },
+  { code: '87', label: '87 - BPC/LOAS (Deficiente)' },
+  { code: '88', label: '88 - BPC/LOAS (Idoso)' },
+  { code: '80', label: '80 - Salário Maternidade' },
+  { code: '25', label: '25 - Auxílio-Reclusão' },
+  { code: '07', label: '07 - Aposentadoria Idade Rural' },
+  { code: '08', label: '08 - Aposentadoria Idade Rural (Empregador)' },
+  { code: '48', label: '48 - Aposentadoria Idade Híbrida' },
+  { code: '96', label: '96 - Pensão Especial Hanseníase' },
+];
+
+export const USER_COLORS = [
+  '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#64748b'
+];
+
+export const USERS: User[] = [
+  { id: 'u1', name: 'Dr. Maurícius Vogel', role: 'LAWYER', avatarInitials: 'MV', color: '#1e3a8a', themePref: 'default' },
+  { id: 'u2', name: 'Dra. Ana Paula', role: 'LAWYER', avatarInitials: 'AP', color: '#db2777', themePref: 'default' },
+  { id: 'u3', name: 'Secretaria', role: 'SECRETARY', avatarInitials: 'SC', color: '#059669', themePref: 'default' },
+  { id: 'u4', name: 'Financeiro', role: 'FINANCIAL', avatarInitials: 'FN', color: '#d97706', themePref: 'default' }
+];
+
+export const DEFAULT_SYSTEM_TAGS: SystemTag[] = [
+  { id: 'tag_1', label: 'Prioridade', colorBg: 'bg-red-100', colorText: 'text-red-700' },
+  { id: 'tag_2', label: 'Rural', colorBg: 'bg-green-100', colorText: 'text-green-700' },
+  { id: 'tag_3', label: 'Liminar', colorBg: 'bg-purple-100', colorText: 'text-purple-700' },
+  { id: 'tag_4', label: 'Acordo', colorBg: 'bg-blue-100', colorText: 'text-blue-700' },
+  { id: 'tag_5', label: 'Complexo', colorBg: 'bg-orange-100', colorText: 'text-orange-700' },
+  { id: 'tag_6', label: 'Falta Docs', colorBg: 'bg-yellow-100', colorText: 'text-yellow-800' },
+  { id: 'tag_7', label: 'CONCEDIDO', colorBg: 'bg-emerald-100', colorText: 'text-emerald-700' },
+  { id: 'tag_8', label: 'INDEFERIDO', colorBg: 'bg-red-100', colorText: 'text-red-700' },
+  { id: 'tag_9', label: 'A RECEBER', colorBg: 'bg-emerald-100', colorText: 'text-emerald-700' },
+];
+export const SYSTEM_TAGS = DEFAULT_SYSTEM_TAGS;
+
+export const COMMON_DOCUMENTS = [
+  'RG / CNH', 'CPF', 'Comprovante de Residência', 'CTPS (Carteira de Trabalho)', 'Extrato CNIS', 
+  'Laudos Médicos', 'Receitas Médicas', 'Exames', 'PPP (Perfil Profissiográfico)', 'LTCAT', 
+  'Carnês de Contribuição', 'Certidão de Casamento/Nascimento', 'Declaração Sindicato Rural', 
+  'Notas Fiscais Produtor', 'Procuração Assinada', 'Contrato Honorários Assinado', 'Declaração de Hipossuficiência'
+];
+
+export const DEFAULT_INSS_AGENCIES: INSSAgency[] = [
+  { id: 'aps_1', name: 'Agência INSS - CRUZ ALTA', address: 'Rua Voluntários da Pátria, 555, Centro' },
+  { id: 'aps_2', name: 'Agência INSS - IBIRUBÁ', address: 'Rua do Comércio, 123, Centro' },
+  { id: 'aps_3', name: 'Agência INSS - SANTA BÁRBARA', address: 'Av. Principal, 100' },
+  { id: 'aps_4', name: 'Agência INSS - PANAMBI', address: 'Rua Sete de Setembro, 200' },
+  { id: 'aps_5', name: 'Agência INSS - IJUÍ', address: 'Rua 15 de Novembro, 300' }
+];
+
+export const JUDICIAL_COURTS: INSSAgency[] = [
+    { id: 'vara_1', name: '1ª Vara Federal de Cruz Alta', address: 'Rua General Câmara, 435' },
+    { id: 'vara_2', name: '2ª Vara Federal de Cruz Alta', address: 'Rua General Câmara, 435' },
+    { id: 'vara_3', name: 'Vara Federal de Carazinho', address: 'Av. Pátria, 789' },
+    { id: 'vara_4', name: 'Vara Federal de Ijuí', address: 'Rua do Comércio, 500' }
+];
+
+export const WHATSAPP_TEMPLATES: WhatsAppTemplate[] = [
+  { 
+    id: 't_aviso_pericia', 
+    label: 'Aviso de Perícia', 
+    category: 'PERICIA', 
+    text: 'Olá {NOME}, sua perícia foi agendada para o dia {DATA_PERICIA} no local: {LOCAL_PERICIA}. Chegue com 30min de antecedência e leve seus documentos pessoais e laudos médicos.' 
+  },
+  { 
+    id: 't_aviso_pericia_imediato', 
+    label: 'Aviso Perícia (Urgente)', 
+    category: 'PERICIA', 
+    text: 'URGENTE: {NOME}, confirmamos sua perícia para {DATA_PERICIA} às {HORA_PERICIA}. Local: {LOCAL_PERICIA}. Não falte!' 
+  },
+  { 
+    id: 't_cobranca_docs', 
+    label: 'Cobrar Documentos', 
+    category: 'DOCUMENTOS', 
+    text: 'Olá {NOME}, precisamos dos seguintes documentos para dar andamento no seu processo: {LISTA_DOCS}. Pode nos enviar foto legível por aqui?' 
+  },
+  { 
+    id: 't_resultado_concedido', 
+    label: 'Resultado: Aprovado', 
+    category: 'RESULTADO', 
+    text: 'Ótima notícia {NOME}! Seu benefício foi APROVADO. Entre em contato para agendarmos a liberação do pagamento.' 
+  },
+  { 
+    id: 't_aniversario', 
+    label: 'Feliz Aniversário', 
+    category: 'GERAL', 
+    text: 'Parabéns {NOME}! O escritório deseja muitas felicidades e saúde neste dia especial. 🎉' 
+  },
+  { 
+    id: 't_check_prorrogacao', 
+    label: 'Checar Prorrogação', 
+    category: 'GERAL', 
+    text: 'Olá {NOME}, seu benefício está previsto para encerrar em {DATA_DCB}. Você ainda está sem condições de voltar ao trabalho? Precisamos saber para pedir a prorrogação.' 
+  },
+  { 
+    id: 't_pericia_judicial', 
+    label: 'Perícia Judicial', 
+    category: 'PERICIA', 
+    text: 'Olá {NOME}, a perícia com o médico do Juiz foi marcada para {DATA_PERICIA} às {HORA_PERICIA} na {LOCAL_PERICIA}. É muito importante levar exames atuais.' 
+  },
+  { 
+    id: 't_pericia_inss', 
+    label: 'Perícia INSS', 
+    category: 'PERICIA', 
+    text: 'Olá {NOME}, agendamos sua perícia no INSS para {DATA_PERICIA} às {HORA_PERICIA}. Local: {LOCAL_PERICIA}. Leve identidade e carteira de trabalho.' 
+  }
+];
+
+export const DOCUMENT_VARIABLES = [
+    { key: '{NOME_CLIENTE}', label: 'Nome do Cliente' },
+    { key: '{CPF}', label: 'CPF' },
+    { key: '{RG}', label: 'RG' },
+    { key: '{ENDERECO_COMPLETO}', label: 'Endereço Completo' },
+    { key: '{NB}', label: 'Número Benefício' },
+    { key: '{DATA_ATUAL}', label: 'Data de Hoje (Extenso)' },
+    { key: '{CIDADE}', label: 'Cidade do Cliente' },
+    { key: '{ADVOGADO_RESPONSAVEL}', label: 'Advogado Responsável' },
+    { key: '{PIS}', label: 'PIS' },
+    { key: '{TELEFONE}', label: 'Telefone' },
+    { key: '{ESTADO_CIVIL}', label: 'Estado Civil' },
+    { key: '{DATA_NASCIMENTO}', label: 'Data de Nascimento' },
+    { key: '{NOME_MAE}', label: 'Nome da Mãe' },
+    { key: '{NPU}', label: 'NPU (Processo Judicial)' }
+];
+
+export const DEFAULT_DOCUMENT_TEMPLATES: DocumentTemplate[] = [
+    {
+        id: 'tpl_proc_1',
+        title: 'Procuração Administrativa',
+        category: 'PROCURACAO',
+        content: '<p align="center"><strong>PROCURAÇÃO AD JUDICIA ET EXTRA</strong></p><p><br></p><p><strong>OUTORGANTE:</strong> {NOME_CLIENTE}, brasileiro(a), {ESTADO_CIVIL}, portador(a) do RG nº {RG} e CPF nº {CPF}, residente e domiciliado(a) na {ENDERECO_COMPLETO}.</p><p><strong>OUTORGADOS:</strong> {ADVOGADO_RESPONSAVEL}, inscrito na OAB...</p><p><strong>PODERES:</strong> Amplos poderes para o foro em geral...</p><p><br></p><p align="center">{CIDADE}, {DATA_ATUAL}</p><p align="center"><br></p><p align="center">___________________________________</p><p align="center">{NOME_CLIENTE}</p>',
+        lastModified: new Date().toISOString()
+    },
+    {
+        id: 'tpl_contrato_1',
+        title: 'Contrato de Honorários',
+        category: 'CONTRATO',
+        content: '<p align="center"><strong>CONTRATO DE HONORÁRIOS ADVOCATÍCIOS</strong></p><p><br></p><p>Pelo presente instrumento, <strong>{NOME_CLIENTE}</strong>, CPF {CPF}, contrata os serviços profissionais...</p>',
+        lastModified: new Date().toISOString()
+    },
+    {
+        id: 'tpl_dec_hipo',
+        title: 'Declaração de Hipossuficiência',
+        category: 'DECLARACAO',
+        content: '<p align="center"><strong>DECLARAÇÃO DE HIPOSSUFICIÊNCIA</strong></p><p><br></p><p>Eu, <strong>{NOME_CLIENTE}</strong>, CPF {CPF}, declaro para os devidos fins que não possuo condições de arcar com as custas processuais...</p>',
+        lastModified: new Date().toISOString()
+    }
+];
 
 export const INITIAL_CASES: Case[] = [
   {

@@ -1,26 +1,39 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { FileText, CheckCircle, XCircle, HelpCircle, Briefcase, Calculator, Hash, Clock, Siren, Plus, Trash2, Calendar, Gavel, ShieldAlert, ArrowRight, LayoutList, FileInput, ChevronRight, Activity, TrendingUp, Stethoscope, MapPin, ClipboardList, Heart, Users, Wheat, Timer, Construction, Copy, Check } from 'lucide-react';
-import { Case, MandadoSeguranca, INSSAgency } from '../../types';
-import { BENEFIT_OPTIONS, ADMIN_COLUMNS, AUX_DOENCA_COLUMNS, JUDICIAL_COLUMNS, RECURSO_ADM_COLUMNS, DEFAULT_INSS_AGENCIES } from '../../constants';
-import { formatBenefitNumber, getDaysSince, getBenefitGroup } from '../../utils';
+import { FileText, CheckCircle, XCircle, HelpCircle, Briefcase, Calculator, Hash, Clock, Siren, Plus, Trash2, Calendar, Gavel, ShieldAlert, ArrowRight, LayoutList, FileInput, ChevronRight, Activity, TrendingUp, Stethoscope, MapPin, ClipboardList, Heart, Users, Wheat, Timer, Construction, Copy, Check, Edit3, MessageCircle, Send, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Case, MandadoSeguranca, INSSAgency, WhatsAppTemplate, Task } from '../../types';
+import { BENEFIT_OPTIONS, ADMIN_COLUMNS, AUX_DOENCA_COLUMNS, JUDICIAL_COLUMNS, RECURSO_ADM_COLUMNS, DEFAULT_INSS_AGENCIES, JUDICIAL_COURTS, WHATSAPP_TEMPLATES } from '../../constants';
+import { formatBenefitNumber, getDaysSince, getBenefitGroup, calculateDynamicSLA, getLocationAddress, getDaysDiff, parseLocalYMD } from '../../utils';
 import { db } from '../../services/database';
 
 interface CaseTimelineProps {
   data: Case;
   onChange: (updates: Partial<Case>) => void;
+  whatsAppTemplates?: WhatsAppTemplate[];
 }
 
-export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) => {
+export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange, whatsAppTemplates }) => {
   const [newMS, setNewMS] = useState<Partial<MandadoSeguranca>>({ status: 'AGUARDANDO', reason: 'DEMORA_ANALISE' });
   const [showMsForm, setShowMsForm] = useState(false);
   const [copiedKit, setCopiedKit] = useState(false);
   const [agenciesList, setAgenciesList] = useState<INSSAgency[]>(DEFAULT_INSS_AGENCIES);
+  
+  // Predictor State
+  const [dynamicSLA, setDynamicSLA] = useState<number | null>(null);
 
-  // Load Agencies Async
+  // Load Agencies & SLA Logic Async
   useEffect(() => {
-      db.getAgencies().then(setAgenciesList);
-  }, []);
+      db.getAgencies().then(list => {
+          // Merge Agencies + Courts for the dropdown
+          setAgenciesList([...list, ...JUDICIAL_COURTS]);
+      });
+      
+      // Calculate Dynamic SLA for current column based on all cases
+      db.getCases().then(allCases => {
+          const sla = calculateDynamicSLA(allCases, data.columnId);
+          setDynamicSLA(sla);
+      });
+  }, [data.columnId]);
 
   // --- LOGIC FOR VISUAL STEPPER ---
   const getSteps = () => {
@@ -44,12 +57,19 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
   const isRetirementTime = benefitGroup === 'RETIREMENT_TIME';
   const isSpecial = benefitGroup === 'SPECIAL';
   
+  // LOGIC FLAGS
+  const showPericiaPanel = data.columnId === 'aux_pericia' || data.columnId === 'jud_pericia' || !!data.periciaDate;
+  const showMaintenancePanel = (data.columnId === 'aux_ativo' || data.columnId === 'adm_pagamento') && !!data.dcbDate;
+  const isJudicialPericia = data.columnId === 'jud_pericia';
+
   // --- PROCESS CLOCK LOGIC (Relógio do MS) ---
   const processClock = useMemo(() => {
       let startDate = data.protocolDate;
       let label = 'Protocolo INSS';
-      let limit = 90; // Dias normais
-      let msLimit = 120; // Dias para MS
+      
+      // Use Dynamic SLA if available, otherwise fallback to static standard
+      let limit = dynamicSLA || 90; // Dynamic Average or 90
+      let msLimit = 120; // Hard limit for MS doesn't change based on history usually
 
       // Lógica para Recurso
       if (data.view === 'RECURSO_ADM') {
@@ -69,7 +89,9 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
       
       let status = 'NORMAL';
       let color = 'bg-blue-500';
-      let message = 'Dentro do prazo esperado.';
+      let message = dynamicSLA 
+        ? `Média histórica do escritório: ${dynamicSLA} dias.` 
+        : 'Dentro do prazo esperado.';
 
       if (days > msLimit) {
           status = 'CRITICAL';
@@ -78,13 +100,15 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
       } else if (days > limit) {
           status = 'WARNING';
           color = 'bg-orange-500';
-          message = 'Atenção: Prazo administrativo extrapolado.';
+          message = dynamicSLA 
+            ? `Acima da média do escritório (${dynamicSLA} dias).` 
+            : 'Atenção: Prazo administrativo extrapolado.';
       } else {
           color = 'bg-emerald-500';
       }
 
-      return { days, label, progress, status, color, message, msLimit };
-  }, [data]);
+      return { days, label, progress, status, color, message, msLimit, limit };
+  }, [data, dynamicSLA]);
 
   // --- MANDADO DE SEGURANÇA HANDLERS ---
   const handleAddMS = () => {
@@ -106,37 +130,62 @@ export const CaseTimeline: React.FC<CaseTimelineProps> = ({ data, onChange }) =>
       onChange({ mandadosSeguranca: data.mandadosSeguranca?.filter(m => m.id !== id) });
   };
 
-  const handleGenerateKitPericia = async () => {
-      // Find exact address
-      const agency = agenciesList.find(a => a.name === data.periciaLocation);
-      const fullLocation = agency ? `${agency.name} (${agency.address})` : (data.periciaLocation || 'Agência do INSS');
-
-      const periciaText = `
-*KIT PERÍCIA - RAMBO PREV*
---------------------------
-*Cliente:* ${data.clientName}
-*Data:* ${data.periciaDate ? new Date(data.periciaDate).toLocaleDateString() : 'A DEFINIR'}
-*Hora:* ${data.periciaTime || 'A DEFINIR'}
-*Local:* ${fullLocation}
-
-*O QUE LEVAR (ORIGINAIS):*
-[ ] RG e CPF
-[ ] Carteira de Trabalho (Todas)
-[ ] Laudos Médicos (Atuais e Antigos)
-[ ] Receitas de Medicamentos
-[ ] Exames de Imagem (Raio-X, Ressonância)
-
-*DICA DE OURO:*
-Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apenas da dor, fale da limitação.
-      `.trim();
-      
-      try {
-          await navigator.clipboard.writeText(periciaText);
-          setCopiedKit(true);
-          setTimeout(() => setCopiedKit(false), 2000);
-      } catch (err) {
-          alert("Erro ao copiar. Tente selecionar o texto manualmente.");
+  const handleNotifyNow = () => {
+      if (!data.periciaDate) {
+          alert('Defina a data da perícia antes de avisar o cliente.');
+          return;
       }
+      
+      const fullLocation = getLocationAddress(data.periciaLocation);
+      const isJudicial = data.columnId === 'jud_pericia';
+      
+      const templates = whatsAppTemplates && whatsAppTemplates.length > 0 ? whatsAppTemplates : WHATSAPP_TEMPLATES;
+      
+      let template = templates.find(t => t.id === 't_aviso_pericia_imediato') || templates.find(t => t.category === 'PERICIA');
+      
+      let msg = '';
+      if (template) {
+          msg = template.text
+            .replace('{NOME}', data.clientName.split(' ')[0])
+            .replace('{TIPO_PERICIA}', isJudicial ? 'Justiça Federal' : 'INSS')
+            .replace('{DATA_PERICIA}', new Date(data.periciaDate).toLocaleDateString())
+            .replace('{HORA_PERICIA}', data.periciaTime || 'A Confirmar')
+            .replace('{LOCAL_PERICIA}', fullLocation)
+            .replace('{PROTOCOLO}', data.protocolNumber || 'N/A')
+            .replace('{ID_INTERNO}', data.internalId);
+      } else {
+          msg = `Olá ${data.clientName.split(' ')[0]}, sua perícia foi agendada para ${new Date(data.periciaDate).toLocaleDateString()} às ${data.periciaTime || ''} no local: ${fullLocation}. Chegue com antecedência!`;
+      }
+      
+      const phone = data.phone.replace(/\D/g, '');
+      const finalPhone = phone.length <= 11 ? `55${phone}` : phone;
+      window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const handleCheckHealth = () => {
+      if(!data.dcbDate) return;
+      const templates = whatsAppTemplates && whatsAppTemplates.length > 0 ? whatsAppTemplates : WHATSAPP_TEMPLATES;
+      let template = templates.find(t => t.id === 't_check_prorrogacao') || templates.find(t => t.category === 'GERAL');
+
+      let msg = '';
+      if (template) {
+          msg = template.text
+            .replace('{NOME}', data.clientName.split(' ')[0])
+            .replace('{DATA_DCB}', new Date(data.dcbDate).toLocaleDateString());
+      } else {
+          msg = `Olá ${data.clientName.split(' ')[0]}, seu benefício termina dia ${new Date(data.dcbDate).toLocaleDateString()}. Como você está se sentindo?`;
+      }
+
+      const phone = data.phone.replace(/\D/g, '');
+      const finalPhone = phone.length <= 11 ? `55${phone}` : phone;
+      window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+
+      // Update Contact Date and create Follow Up Task
+      const newTask: Task = { id: `t_pp_follow_${Date.now()}`, text: 'Aguardando resposta sobre PP (Prorrogação)', completed: false };
+      onChange({ 
+          lastContactDate: new Date().toISOString(),
+          tasks: [...(data.tasks || []), newTask]
+      });
   };
 
   const getConfidenceColor = (val: number) => {
@@ -147,64 +196,141 @@ Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apena
       return 'text-slate-500 bg-slate-50';
   };
 
-  // --- BENEFIT SPECIFIC PANELS ---
-
-  // 1. INCAPACIDADE (AUX DOENÇA / LOAS DEFICIENTE)
-  const renderIncapacityPanel = () => (
-      <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg">
-          <label className="block text-[10px] font-bold text-orange-700 uppercase mb-2 flex items-center gap-1">
-              <Stethoscope size={12}/> Estratégia: Incapacidade
-          </label>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-              <button 
-                  onClick={() => onChange({ strategyType: 'ATESTMED' })}
-                  className={`text-xs p-2 rounded border transition-colors font-bold ${data.strategyType === 'ATESTMED' ? 'bg-orange-200 border-orange-300 text-orange-900' : 'bg-white border-orange-100 text-slate-500 hover:bg-orange-50'}`}
-              >
-                  ATESTMED (Doc)
-              </button>
-              <button 
-                  onClick={() => onChange({ strategyType: 'PRESENCIAL' })}
-                  className={`text-xs p-2 rounded border transition-colors font-bold ${data.strategyType === 'PRESENCIAL' ? 'bg-blue-200 border-blue-300 text-blue-900' : 'bg-white border-blue-100 text-slate-500 hover:bg-blue-50'}`}
-              >
-                  PRESENCIAL
-              </button>
-          </div>
-          
-          <div className="border-t border-orange-200 pt-2">
-              <div className="flex justify-between items-center mb-2">
-                  <label className="block text-[10px] font-bold text-orange-800 uppercase">Agendamento Perícia</label>
+  // --- RENDER BLOCK: PERICIA MANAGEMENT ---
+  const renderPericiaBlock = () => (
+      <div className={`p-4 rounded-xl border flex flex-col gap-3 relative overflow-hidden transition-all shadow-sm ${isJudicialPericia ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'}`}>
+          <div className="flex justify-between items-center border-b border-black/5 pb-2 mb-1">
+              <h4 className={`text-xs font-bold uppercase flex items-center gap-2 ${isJudicialPericia ? 'text-purple-800' : 'text-orange-800'}`}>
+                  <Calendar size={14}/> Agendamento de Perícia
+              </h4>
+              <div className="flex gap-2">
                   <button 
-                      onClick={handleGenerateKitPericia}
-                      className={`text-[9px] px-2 py-0.5 rounded border font-bold flex items-center gap-1 transition-all ${copiedKit ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-orange-700 border-orange-200 hover:bg-orange-100'}`}
+                      onClick={handleNotifyNow}
+                      className="text-[10px] bg-green-500 text-white hover:bg-green-600 px-2 py-1 rounded-lg font-bold flex items-center gap-1 shadow-sm transition-all"
+                      title="Enviar mensagem completa (com orientações) via WhatsApp"
                   >
-                      {copiedKit ? <Check size={10}/> : <Copy size={10}/>} {copiedKit ? 'Copiado!' : 'Copiar Kit'}
+                      <MessageCircle size={12}/> Avisar Cliente
                   </button>
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                  <input type="date" className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs outline-none focus:border-orange-300" value={data.periciaDate || ''} onChange={e => onChange({ periciaDate: e.target.value })} />
-                  <input type="time" className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs outline-none focus:border-orange-300" value={data.periciaTime || ''} onChange={e => onChange({ periciaTime: e.target.value })} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+              <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data da Perícia</label>
+                  <div className="relative">
+                      <input 
+                        type="date" 
+                        className={`w-full bg-white border rounded-lg p-2 text-sm outline-none focus:ring-2 ${isJudicialPericia ? 'border-purple-300 focus:ring-purple-400' : 'border-orange-300 focus:ring-orange-400'} font-bold text-slate-700`}
+                        value={data.periciaDate ? new Date(data.periciaDate).toISOString().slice(0,10) : ''}
+                        onChange={e => onChange({ periciaDate: e.target.value })}
+                      />
+                  </div>
               </div>
-              <div className="relative">
-                  <MapPin size={12} className="absolute left-2 top-2 text-slate-400"/>
+              <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hora</label>
                   <input 
-                    type="text" 
-                    placeholder="Local da Agência" 
-                    className="w-full bg-white border border-slate-200 rounded p-1.5 pl-6 text-xs outline-none focus:border-orange-300" 
-                    value={data.periciaLocation || ''} 
-                    onChange={e => onChange({ periciaLocation: e.target.value })} 
-                    list="agencies-list"
+                    type="time" 
+                    className={`w-full bg-white border rounded-lg p-2 text-sm outline-none focus:ring-2 ${isJudicialPericia ? 'border-purple-300 focus:ring-purple-400' : 'border-orange-300 focus:ring-orange-400'} font-bold text-slate-700`}
+                    value={data.periciaTime || ''} 
+                    onChange={e => onChange({ periciaTime: e.target.value })} 
                   />
-                  <datalist id="agencies-list">
-                      {agenciesList.map(agency => (
-                          <option key={agency.id} value={agency.name} />
-                      ))}
-                  </datalist>
               </div>
+          </div>
+          
+          <div className="relative">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  <MapPin size={10}/> Localização
+              </label>
+              <input 
+                type="text" 
+                placeholder={isJudicialPericia ? "Selecione a Vara Federal..." : "Selecione a Agência..."}
+                className={`w-full bg-white border rounded-lg p-2 text-sm outline-none focus:ring-2 pl-3 ${isJudicialPericia ? 'border-purple-300 focus:ring-purple-400' : 'border-orange-300 focus:ring-orange-400'}`} 
+                value={data.periciaLocation || ''} 
+                onChange={e => onChange({ periciaLocation: e.target.value })} 
+                list="agencies-timeline-list"
+              />
+              <datalist id="agencies-timeline-list">
+                  {agenciesList.map(agency => (
+                      <option key={agency.id} value={agency.name} />
+                  ))}
+              </datalist>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 text-[10px] text-slate-500">
+              <ShieldAlert size={12} className="text-slate-400"/>
+              <span>Ao salvar, a Agenda será atualizada e uma tarefa de lembrete será criada automaticamente.</span>
           </div>
       </div>
   );
 
-  // 2. PENSÃO POR MORTE
+  // --- RENDER BLOCK: MAINTENANCE (DCB) ---
+  const renderMaintenancePanel = () => {
+      const daysLeft = getDaysDiff(data.dcbDate);
+      const isWarning = daysLeft !== null && daysLeft <= 15;
+      const isCritical = daysLeft !== null && daysLeft <= 5;
+
+      return (
+        <div className={`p-4 rounded-xl border flex flex-col gap-3 relative overflow-hidden transition-all shadow-sm ${isCritical ? 'bg-red-50 border-red-200' : isWarning ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
+            <div className="flex justify-between items-center border-b border-black/5 pb-2 mb-1">
+                <h4 className={`text-xs font-bold uppercase flex items-center gap-2 ${isCritical ? 'text-red-800' : isWarning ? 'text-orange-800' : 'text-green-800'}`}>
+                    <Activity size={14}/> Gestão de Manutenção
+                </h4>
+                {daysLeft !== null && daysLeft > 0 && (
+                    <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border border-black/10">
+                        Cessa em {daysLeft} dias
+                    </span>
+                )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Data de Cessação (DCB)</label>
+                    <input 
+                        type="date" 
+                        className="bg-white border rounded p-1 text-xs outline-none focus:ring-1 focus:ring-blue-300 font-bold w-32"
+                        value={data.dcbDate || ''}
+                        onChange={e => onChange({ dcbDate: e.target.value })}
+                    />
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full h-2 bg-white rounded-full overflow-hidden border border-black/10 relative">
+                    <div 
+                        className={`h-full transition-all duration-1000 ${isCritical ? 'bg-red-500' : isWarning ? 'bg-orange-500' : 'bg-green-500'}`} 
+                        style={{ width: `${Math.max(0, Math.min(100, (daysLeft || 0) / 120 * 100))}%` }}
+                    ></div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 mt-2">
+                    <button 
+                        onClick={handleCheckHealth}
+                        className="flex-1 bg-white border border-green-200 text-green-700 hover:bg-green-50 rounded-lg py-2 px-3 text-xs font-bold flex items-center justify-center gap-1 shadow-sm transition-colors"
+                        title="Envia mensagem perguntando saúde e cria tarefa de follow-up"
+                    >
+                        <MessageCircle size={14}/> Checar Saúde (PP?)
+                    </button>
+                    <button 
+                        onClick={() => onChange({ isExtension: true, columnId: 'aux_prorrogacao' })}
+                        className="flex-1 bg-blue-600 text-white hover:bg-blue-700 rounded-lg py-2 px-3 text-xs font-bold flex items-center justify-center gap-1 shadow-sm transition-colors"
+                    >
+                        <RefreshCw size={14}/> Pedir Prorrogação
+                    </button>
+                </div>
+                
+                {data.isExtension && (
+                    <div className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100 flex items-center gap-1 justify-center">
+                        <CheckCircle size={10}/> Pedido de Prorrogação (PP) já sinalizado
+                    </div>
+                )}
+            </div>
+        </div>
+      );
+  };
+
+  // --- BENEFIT SPECIFIC PANELS ---
+
+  // 1. PENSÃO POR MORTE
   const renderPensionPanel = () => (
       <div className="bg-pink-50 border border-pink-100 p-3 rounded-lg">
           <label className="block text-[10px] font-bold text-pink-700 uppercase mb-2 flex items-center gap-1">
@@ -235,7 +361,7 @@ Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apena
       </div>
   );
 
-  // 3. APOSENTADORIA (Tempo / Idade / Especial)
+  // 2. APOSENTADORIA (Tempo / Idade / Especial)
   const renderRetirementPanel = () => (
       <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-lg">
           <label className="block text-[10px] font-bold text-indigo-700 uppercase mb-2 flex items-center gap-1">
@@ -275,7 +401,7 @@ Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apena
       </div>
   );
 
-  // 4. RURAL / HIBRIDA
+  // 3. RURAL / HIBRIDA
   const renderRuralPanel = () => (
       <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg">
           <label className="block text-[10px] font-bold text-amber-700 uppercase mb-2 flex items-center gap-1">
@@ -339,7 +465,7 @@ Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apena
             </div>
         </div>
 
-        {/* 2. RELÓGIO PROCESSUAL (CONSULTIVO) */}
+        {/* 2. RELÓGIO PROCESSUAL (CONSULTIVO & PREDITIVO) */}
         {processClock && (
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 relative overflow-hidden">
                 <div className="flex justify-between items-end mb-2 relative z-10">
@@ -363,9 +489,20 @@ Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apena
                         className={`h-full transition-all duration-1000 ${processClock.color}`} 
                         style={{ width: `${processClock.progress}%` }}
                     ></div>
+                    {/* Dynamic SLA Marker */}
+                    {dynamicSLA && (
+                        <div 
+                            className="absolute top-0 bottom-0 w-1 bg-black/20 z-20"
+                            style={{ left: `${Math.min((dynamicSLA / processClock.msLimit) * 100, 100)}%` }}
+                            title={`Média do Escritório: ${dynamicSLA} dias`}
+                        ></div>
+                    )}
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400 mt-1 relative z-10 font-bold">
                     <span>Protocolo (Dia 0)</span>
+                    <span className={dynamicSLA ? "text-blue-600" : ""}>
+                        {dynamicSLA ? `Média Histórica (~${dynamicSLA}d)` : `SLA Estimado (${processClock.limit}d)`}
+                    </span>
                     <span>Prazo MS ({processClock.msLimit} dias)</span>
                 </div>
 
@@ -411,8 +548,26 @@ Foque no que você *NÃO CONSEGUE* fazer no trabalho ou em casa. Não fale apena
                         </select>
                     </div>
 
+                    {/* SHOW PERICIA MANAGEMENT BLOCK IF APPLICABLE */}
+                    {showPericiaPanel && renderPericiaBlock()}
+
+                    {/* SHOW MAINTENANCE PANEL (DCB) */}
+                    {showMaintenancePanel && renderMaintenancePanel()}
+
                     {/* CONTEXTUAL PANELS */}
-                    {isIncapacity && renderIncapacityPanel()}
+                    {/* Incapacity logic: only show simplified strategy if pericia block is not already showing details */}
+                    {isIncapacity && !showPericiaPanel && !showMaintenancePanel && (
+                        <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg flex items-center justify-between">
+                            <label className="block text-[10px] font-bold text-orange-700 uppercase flex items-center gap-1">
+                                <Stethoscope size={12}/> Tipo:
+                            </label>
+                            <div className="flex gap-2">
+                                <button onClick={() => onChange({ strategyType: 'ATESTMED' })} className={`text-[10px] px-2 py-1 rounded border font-bold ${data.strategyType === 'ATESTMED' ? 'bg-orange-200 border-orange-300 text-orange-900' : 'bg-white border-orange-100'}`}>ATESTMED</button>
+                                <button onClick={() => onChange({ strategyType: 'PRESENCIAL' })} className={`text-[10px] px-2 py-1 rounded border font-bold ${data.strategyType === 'PRESENCIAL' ? 'bg-blue-200 border-blue-300 text-blue-900' : 'bg-white border-blue-100'}`}>PRESENCIAL</button>
+                            </div>
+                        </div>
+                    )}
+                    
                     {isPension && renderPensionPanel()}
                     {(isRetirementAge || isRetirementTime || isSpecial) && renderRetirementPanel()}
                     {(data.benefitType === '48' || data.benefitType === '08') && renderRuralPanel()} {/* Híbrida/Rural explícito */}

@@ -1,9 +1,8 @@
 
-
 import React, { useState } from 'react';
-import { User, Copy, Check, Send, Key, ChevronUp, ChevronDown, MapPin, Search, XCircle, Phone, Cake, Users } from 'lucide-react';
+import { User, Copy, Check, Send, Key, ChevronUp, ChevronDown, MapPin, Search, XCircle, Phone, Cake, Users, Wand2 } from 'lucide-react';
 import { Case } from '../../types';
-import { formatCPF, formatPhoneNumber } from '../../utils';
+import { formatCPF, formatPhoneNumber, extractDataFromText } from '../../utils';
 
 interface ClientInfoProps {
   data: Case;
@@ -16,6 +15,8 @@ export const ClientInfo: React.FC<ClientInfoProps> = ({ data, onChange, onOpenWh
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [cepError, setCepError] = useState(false);
+  const [isMagicPasteOpen, setIsMagicPasteOpen] = useState(false);
+  const [magicText, setMagicText] = useState('');
 
   const copyToClipboard = (text: string | undefined, f: string) => { 
     if(text) { 
@@ -62,18 +63,67 @@ export const ClientInfo: React.FC<ClientInfoProps> = ({ data, onChange, onOpenWh
       }
   };
 
+  const handleMagicPaste = () => {
+      if(!magicText.trim()) return;
+      const extracted = extractDataFromText(magicText);
+      onChange(extracted);
+      setMagicText('');
+      setIsMagicPasteOpen(false);
+      setShowExtendedInfo(true); // Show fields to verify
+      
+      // Feedback via alert for now
+      const fields = Object.keys(extracted).length;
+      if(fields > 0) alert(`${fields} campos identificados e preenchidos automaticamente! Verifique os dados.`);
+      else alert('Nenhum dado reconhecido no texto colado.');
+  };
+
   return (
-    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm transition-all duration-300">
+    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm transition-all duration-300 relative overflow-hidden">
+        
+        {/* MAGIC PASTE OVERLAY */}
+        {isMagicPasteOpen && (
+            <div className="absolute inset-0 bg-white/95 z-20 flex flex-col p-4 animate-in fade-in">
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                        <Wand2 size={16}/> Colagem Mágica (IA)
+                    </h4>
+                    <button onClick={() => setIsMagicPasteOpen(false)} className="p-1 hover:bg-slate-100 rounded-full"><XCircle size={18} className="text-slate-400"/></button>
+                </div>
+                <textarea
+                    autoFocus
+                    className="flex-1 w-full border border-purple-200 rounded-lg p-3 text-xs focus:ring-2 focus:ring-purple-100 outline-none resize-none mb-3"
+                    placeholder="Cole aqui o texto do CNIS, RG, ou Ficha Cadastral... O sistema extrairá CPF, Nome, Datas e Endereço automaticamente."
+                    value={magicText}
+                    onChange={(e) => setMagicText(e.target.value)}
+                />
+                <button 
+                    onClick={handleMagicPaste}
+                    className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-purple-700 shadow-md"
+                >
+                    Processar Texto
+                </button>
+            </div>
+        )}
+
         <div className="flex justify-between items-center mb-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <User size={14}/> Dados do Cliente
             </h3>
-            <button 
-                onClick={() => setShowExtendedInfo(!showExtendedInfo)}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded transition-colors"
-            >
-                {showExtendedInfo ? <><ChevronUp size={14} /> Menos Detalhes</> : <><ChevronDown size={14} /> Expandir Ficha</>}
-            </button>
+            <div className="flex gap-2">
+                <button 
+                    onClick={() => setIsMagicPasteOpen(true)}
+                    className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 bg-purple-50 border border-purple-100 px-2 py-1 rounded transition-colors"
+                    title="Preencher dados automaticamente colando texto"
+                >
+                    <Wand2 size={12} /> Auto-Preencher
+                </button>
+                <button 
+                    onClick={() => setShowExtendedInfo(!showExtendedInfo)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded transition-colors"
+                >
+                    {showExtendedInfo ? <><ChevronUp size={14} /> Menos</> : <><ChevronDown size={14} /> Mais Detalhes</>}
+                </button>
+            </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

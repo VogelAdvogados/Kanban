@@ -128,7 +128,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ cases, users, onClose }) =
 
         <div className="p-6 overflow-y-auto flex-1 kanban-scroll">
             
-            <DashboardKPIs stats={stats} />
+            <DashboardKPIs stats={stats} allCases={cases} />
 
             {/* Health Monitor Section */}
             <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">

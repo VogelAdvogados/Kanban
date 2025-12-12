@@ -1,15 +1,15 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, MapPin, Save, Key, Eye, EyeOff, 
   CreditCard, LayoutGrid, ChevronRight, Briefcase, ExternalLink, 
-  Check, Copy, Search, XCircle, MessageCircle
+  Check, Copy, Search, XCircle, MessageCircle, CalendarPlus
 } from 'lucide-react';
 import { Case } from '../../types';
 import { VIEW_CONFIG, VIEW_THEMES } from '../../constants';
 import { formatDate, formatPhoneNumber } from '../../utils';
 import { ClientGroup } from './ClientList';
+import { useApp } from '../../contexts/AppContext';
 
 interface ClientDetailsProps {
   client: ClientGroup;
@@ -19,6 +19,7 @@ interface ClientDetailsProps {
 }
 
 export const ClientDetails: React.FC<ClientDetailsProps> = ({ client, onClose, onUpdateClient, onSelectCase }) => {
+  const { openSchedule } = useApp(); // Using Global Context
   const [editForm, setEditForm] = useState<Partial<Case>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -135,6 +136,12 @@ export const ClientDetails: React.FC<ClientDetailsProps> = ({ client, onClose, o
                 </div>
             </div>
             <div className="flex items-center gap-3 pl-2">
+                <button 
+                    onClick={() => openSchedule(client.latestCase)}
+                    className="hidden sm:flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200 rounded-lg text-sm font-bold transition-colors"
+                >
+                    <CalendarPlus size={16}/> Agendar
+                </button>
                 {hasChanges && (
                     <button 
                         onClick={handleSave}

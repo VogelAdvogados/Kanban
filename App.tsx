@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { Case, User, OfficeData, SmartAction, SystemSettings, StickyNote } from './types';
-import { VIEW_THEMES } from './constants';
+import { VIEW_THEMES, APP_THEMES } from './constants';
 import { LoginPage } from './components/LoginPage';
 import { useKanban } from './hooks/useKanban';
 import { useIsMobile } from './hooks/useIsMobile';
@@ -10,6 +10,7 @@ import { KanbanBoard } from './components/KanbanBoard';
 import { LoadingScreen } from './components/LoadingScreen';
 import { getLocalDateISOString } from './utils';
 import { db } from './services/database';
+import { AppProvider } from './contexts/AppContext'; // Import Context
 
 // Lazy Loaded Components
 const TransitionModal = React.lazy(() => import('./components/TransitionModal').then(m => ({ default: m.TransitionModal })));
@@ -22,7 +23,7 @@ const MobileLayout = React.lazy(() => import('./components/MobileLayout').then(m
 const GlobalSearch = React.lazy(() => import('./components/search/GlobalSearch').then(m => ({ default: m.GlobalSearch })));
 const ConfirmationModal = React.lazy(() => import('./components/ConfirmationModal').then(m => ({ default: m.ConfirmationModal })));
 const StickyNoteDialog = React.lazy(() => import('./components/StickyNoteDialog').then(m => ({ default: m.StickyNoteDialog })));
-const AppointmentDialog = React.lazy(() => import('./components/AppointmentDialog').then(m => ({ default: m.AppointmentDialog }))); // NEW
+const AppointmentDialog = React.lazy(() => import('./components/AppointmentDialog').then(m => ({ default: m.AppointmentDialog })));
 
 type ActiveTool = 'DASHBOARD' | 'CALENDAR' | 'TASKS' | 'CLIENTS' | 'LOGS' | 'SETTINGS' | null;
 
@@ -49,7 +50,7 @@ const App: React.FC = () => {
     agencies, setAgencies, 
     whatsAppTemplates, setWhatsAppTemplates,
     workflowRules, setWorkflowRules,
-    appointments, addAppointment, cancelAppointment, // NEW
+    appointments, addAppointment, cancelAppointment,
     isLoading, error
   } = useKanban();
 
@@ -77,7 +78,15 @@ const App: React.FC = () => {
   }, []);
 
   // Sync back to DB when these change
-  const handleUpdateUsers = (newUsers: User[]) => { setUsers(newUsers); db.saveUsers(newUsers); };
+  const handleUpdateUsers = (newUsers: User[]) => { 
+      setUsers(newUsers); 
+      db.saveUsers(newUsers); 
+      // Update currentUser reference if self was updated
+      if(currentUser) {
+          const self = newUsers.find(u => u.id === currentUser.id);
+          if(self) setCurrentUser(self);
+      }
+  };
   const handleUpdateOffice = (newOffice: OfficeData) => { setOfficeData(newOffice); db.saveOfficeData(newOffice); };
   const handleUpdateSettings = (newSettings: SystemSettings) => { setSystemSettings(newSettings); db.saveSystemSettings(newSettings); };
 
@@ -88,7 +97,7 @@ const App: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [whatsAppCase, setWhatsAppCase] = useState<Case | null>(null);
   const [documentGenCase, setDocumentGenCase] = useState<Case | null>(null);
-  const [appointmentCase, setAppointmentCase] = useState<Case | null>(null); // NEW STATE
+  const [appointmentCase, setAppointmentCase] = useState<Case | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
   const [stickyNoteState, setStickyNoteState] = useState<{ case: Case, note?: StickyNote } | null>(null);
 
@@ -109,7 +118,18 @@ const App: React.FC = () => {
   };
 
   const [transitionData, setTransitionData] = useState(DEFAULT_TRANSITION_DATA);
-  const activeTheme = VIEW_THEMES[currentView];
+  
+  // --- THEME LOGIC ---
+  const activeViewTheme = VIEW_THEMES[currentView];
+  
+  // Determine actual background class: User Preference > View Default
+  const appBackgroundClass = useMemo(() => {
+      if (currentUser?.themePref && currentUser.themePref !== 'default') {
+          const theme = APP_THEMES.find(t => t.id === currentUser.themePref);
+          return theme ? theme.bgClass : activeViewTheme.bgGradient;
+      }
+      return activeViewTheme.bgGradient;
+  }, [currentUser?.themePref, currentView]);
 
   useEffect(() => { if(!pendingMove) setTransitionData(DEFAULT_TRANSITION_DATA); }, [pendingMove]);
 
@@ -128,6 +148,42 @@ const App: React.FC = () => {
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // --- ACTIONS (Hoisted for Context) ---
+  const handleSmartAction = (c: Case, action: SmartAction) => {
+      if (action.requireConfirmation) { if (!window.confirm(`Executar: "${action.label}"?`)) return; }
+      let updates: Partial<Case> = {};
+      let log = `Ação Rápida: ${action.label}`;
+
+      if (action.tasksToAdd && action.tasksToAdd.length > 0) {
+          const newTasks = action.tasksToAdd.map(t => ({ ...t, id: `t_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, completed: false }));
+          updates.tasks = [...(c.tasks || []), ...newTasks];
+          log += ` | ${newTasks.length} tarefas.`;
+      }
+      if (action.urgency) updates.urgency = action.urgency;
+
+      if (action.targetColumnId && action.targetColumnId !== c.columnId) {
+          if (action.targetView && action.targetView !== c.view) { updates.view = action.targetView; log += ` | Movido para: ${action.targetView}`; }
+          finalizeMove(c, action.targetColumnId, updates, log, currentUser?.name || 'Sistema');
+      } else {
+          updateCase({ ...c, ...updates }, log, currentUser?.name || 'Sistema');
+      }
+  };
+
+  const handleQuickCheck = (c: Case) => {
+      updateCase({ ...c, lastCheckedAt: new Date().toISOString() }, 'Monitoramento: Consulta realizada.', currentUser?.name || 'Sistema');
+  };
+
+  // MEMOIZED CONTEXT VALUE TO PREVENT RE-RENDERS
+  const contextValue = useMemo(() => ({
+      currentUser,
+      users,
+      openSchedule: (c: Case) => setAppointmentCase(c),
+      openWhatsApp: (c: Case) => setWhatsAppCase(c),
+      openSmartAction: handleSmartAction,
+      openStickyNote: (c: Case, note?: StickyNote) => setStickyNoteState({ case: c, note }),
+      openQuickCheck: handleQuickCheck
+  }), [currentUser, users]); // Dependency array is key here
 
   // --- RENDER STATES ---
 
@@ -262,10 +318,6 @@ const App: React.FC = () => {
                 log = `Decisão INSS: INDEFERIDO. Prazo recursal iniciado.`;
                 
             } else if (transitionData.outcome === 'PARTIAL') {
-                // --- MODULE 3: SPLIT CASE LOGIC ---
-                
-                // 1. Original Case (Parent) -> Payment/Finance
-                // IMPORTANT: We hijack the targetColId to send it to Payment
                 pendingMove.targetColId = 'adm_pagamento';
                 
                 updates = {
@@ -276,24 +328,20 @@ const App: React.FC = () => {
                 };
                 log = `Decisão INSS: PARCIALMENTE PROVIDO. Processo enviado para Pagamento. NB: ${transitionData.benefitNumber}.`;
 
-                // 2. New Case (Child) -> Appeal/Resource
                 const childCaseId = `c_split_${Date.now()}`;
                 const childCase: Case = {
                     ...c,
                     id: childCaseId,
-                    internalId: c.internalId + 'R', // Suffix 'R' for Recurso
+                    internalId: c.internalId + 'R',
                     view: 'RECURSO_ADM',
                     columnId: 'rec_triagem',
                     createdAt: new Date().toISOString(),
                     lastUpdate: new Date().toISOString(),
-                    // Partial Denial Params
                     deadlineStart: transitionData.deadlineStart,
                     deadlineEnd: transitionData.deadlineEnd,
                     tags: ['RECURSO PARCIAL', 'INDEFERIDO'],
-                    // Reset benefit specific data for the resource
                     benefitNumber: undefined, 
-                    protocolNumber: c.protocolNumber, // Keep original protocol reference
-                    // Add history link
+                    protocolNumber: c.protocolNumber, 
                     history: [{
                         id: `h_split_start_${Date.now()}`,
                         date: new Date().toISOString(),
@@ -333,26 +381,6 @@ const App: React.FC = () => {
       }
   };
 
-  const handleSmartAction = (c: Case, action: SmartAction) => {
-      if (action.requireConfirmation) { if (!window.confirm(`Executar: "${action.label}"?`)) return; }
-      let updates: Partial<Case> = {};
-      let log = `Ação Rápida: ${action.label}`;
-
-      if (action.tasksToAdd && action.tasksToAdd.length > 0) {
-          const newTasks = action.tasksToAdd.map(t => ({ ...t, id: `t_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, completed: false }));
-          updates.tasks = [...(c.tasks || []), ...newTasks];
-          log += ` | ${newTasks.length} tarefas.`;
-      }
-      if (action.urgency) updates.urgency = action.urgency;
-
-      if (action.targetColumnId && action.targetColumnId !== c.columnId) {
-          if (action.targetView && action.targetView !== c.view) { updates.view = action.targetView; log += ` | Movido para: ${action.targetView}`; }
-          finalizeMove(c, action.targetColumnId, updates, log, currentUser.name);
-      } else {
-          updateCase({ ...c, ...updates }, log, currentUser.name);
-      }
-  };
-
   const handleSaveStickyNotes = (updatedNotes: StickyNote[], logMessage: string) => {
       if (!stickyNoteState || !currentUser) return;
       const { case: c } = stickyNoteState;
@@ -360,14 +388,11 @@ const App: React.FC = () => {
       setStickyNoteState({ case: { ...c, stickyNotes: updatedNotes }, note: undefined }); 
   };
 
-  const handleQuickCheck = (c: Case) => {
-      updateCase({ ...c, lastCheckedAt: new Date().toISOString() }, 'Monitoramento: Consulta realizada.', currentUser.name);
-  };
-
   const pendingCaseContext = pendingMove ? cases.find(c => c.id === pendingMove.caseId) : undefined;
 
   return (
-    <div className={`flex flex-col h-screen bg-gradient-to-br ${activeTheme.bgGradient} font-sans text-slate-900 selection:bg-blue-200 transition-colors duration-500`}>
+    <AppProvider value={contextValue}>
+    <div className={`flex flex-col h-screen bg-gradient-to-br ${appBackgroundClass} font-sans text-slate-900 selection:bg-blue-200 transition-colors duration-500`}>
       {isMobile ? (
         <Suspense fallback={<div className="flex h-screen items-center justify-center text-slate-400">Carregando...</div>}>
             <MobileLayout 
@@ -410,9 +435,11 @@ const App: React.FC = () => {
             draggedCaseId={draggedCaseId} onDrop={(colId) => handleDrop(colId, currentUser)}
             onDragStart={(id) => setDraggedCaseId(id)} onDragEnd={() => setDraggedCaseId(null)}
             onCardClick={(c) => { setSelectedCase(c); setIsModalOpen(true); }}
-            onWhatsApp={(c) => setWhatsAppCase(c)} onQuickCheck={handleQuickCheck} onSmartAction={handleSmartAction}
+            onWhatsApp={(c) => setWhatsAppCase(c)} 
+            onQuickCheck={handleQuickCheck} 
+            onSmartAction={handleSmartAction}
             onStickyNote={(c, note) => setStickyNoteState({ case: c, note })}
-            onSchedule={(c) => setAppointmentCase(c)} // NEW
+            onSchedule={(c) => setAppointmentCase(c)}
             users={users} currentUser={currentUser} systemSettings={systemSettings} systemTags={systemTags}
           />
         </>
@@ -448,6 +475,7 @@ const App: React.FC = () => {
             onSelectCase={(c) => setSelectedCase(c)} onOpenWhatsApp={(c) => setWhatsAppCase(c)}
             onOpenDocumentGenerator={(c) => setDocumentGenCase(c)}
             commonDocs={commonDocs}
+            whatsAppTemplates={whatsAppTemplates} // Pass templates to modal
             />
         )}
         {transitionType && pendingMove && (
@@ -512,6 +540,7 @@ const App: React.FC = () => {
         )}
       </Suspense>
     </div>
+    </AppProvider>
   );
 };
 

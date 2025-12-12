@@ -1,13 +1,14 @@
 
 import React, { useState } from 'react'; 
-import { Tag, Paperclip, UploadCloud, Image, FileText, Download, Trash2, X, AlertTriangle, Plus, CheckCircle2, ChevronDown } from 'lucide-react';
+import { Tag, Paperclip, UploadCloud, Image, FileText, Download, Trash2, X, AlertTriangle, CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
 import { Case, CaseFile, SystemTag } from '../../types';
 import { DEFAULT_SYSTEM_TAGS, COMMON_DOCUMENTS } from '../../constants';
+import { compressImage } from '../../utils';
 
 interface CaseFilesProps {
   data: Case;
   onChange: (updates: Partial<Case>) => void;
-  commonDocs?: string[]; // Optional prop for custom list, fallback to constant
+  commonDocs?: string[]; 
 }
 
 // Helper to get tags
@@ -20,9 +21,20 @@ const getSystemTags = (): SystemTag[] => {
     }
 }
 
+// Helper to convert File to Base64 (Standard)
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
+};
+
 export const CaseFiles: React.FC<CaseFilesProps> = ({ data, onChange, commonDocs }) => {
   const [newTag, setNewTag] = useState('');
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const systemTags = getSystemTags();
   const availableDocs = commonDocs && commonDocs.length > 0 ? commonDocs : COMMON_DOCUMENTS;
@@ -48,49 +60,84 @@ export const CaseFiles: React.FC<CaseFilesProps> = ({ data, onChange, commonDocs
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDraggingFile(true); };
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDraggingFile(false); };
   
+  const processFiles = async (files: File[]) => {
+      if(files.length === 0) return;
+      setIsProcessing(true);
+
+      const MAX_SIZE_MB = 2.0; // Slightly increased limit due to compression
+      const processedFiles: CaseFile[] = [];
+      let errorMsg = '';
+
+      for (const f of files) {
+          // Skip enormous files even before processing
+          if (f.size > 5 * 1024 * 1024) { 
+              errorMsg += `- ${f.name} (muito grande, >5MB)\n`;
+              continue;
+          }
+
+          try {
+              let finalBase64 = '';
+              let finalSize = f.size;
+
+              if (f.type.startsWith('image/')) {
+                  // COMPRESS IMAGE
+                  finalBase64 = await compressImage(f, 0.6, 1024); // 60% quality, max width 1024
+                  // Approximate size of base64
+                  finalSize = Math.round((finalBase64.length * 3) / 4);
+              } else {
+                  // Regular files (PDF etc) - Check size limit strict
+                  if (f.size > MAX_SIZE_MB * 1024 * 1024) {
+                      errorMsg += `- ${f.name} (PDF > ${MAX_SIZE_MB}MB)\n`;
+                      continue;
+                  }
+                  finalBase64 = await fileToBase64(f);
+              }
+
+              processedFiles.push({
+                  id: `f_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, 
+                  name: f.name, 
+                  type: f.type, 
+                  size: finalSize, 
+                  uploadDate: new Date().toISOString(),
+                  url: finalBase64 
+              });
+          } catch (err) {
+              console.error("Erro ao processar arquivo", f.name, err);
+              errorMsg += `- ${f.name} (erro de leitura)\n`;
+          }
+      }
+
+      if (errorMsg) {
+          alert(`Alguns arquivos não foram salvos:\n${errorMsg}\nDica: Para PDFs grandes, use ferramentas de compressão antes de anexar.`);
+      }
+
+      if (processedFiles.length > 0) {
+          onChange({ files: [...(data.files || []), ...processedFiles] });
+      }
+      setIsProcessing(false);
+      setIsDraggingFile(false);
+  };
+
   const handleDropFile = (e: React.DragEvent) => { 
       e.preventDefault(); 
-      setIsDraggingFile(false);
-      const files = Array.from(e.dataTransfer.files);
-      if(files.length === 0) return;
-      
-      const newCaseFiles: CaseFile[] = files.map((f: File) => ({ 
-          id: `f_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, 
-          name: f.name, 
-          type: f.type, 
-          size: f.size, 
-          uploadDate: new Date().toISOString(),
-          url: URL.createObjectURL(f) // Create a temporary URL for immediate download
-      }));
-      onChange({ files: [...(data.files || []), ...newCaseFiles] });
+      const files = Array.from(e.dataTransfer.files) as File[];
+      processFiles(files);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      if(files.length === 0) return;
-      const newCaseFiles: CaseFile[] = files.map((f: File) => ({ 
-          id: `f_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, 
-          name: f.name, 
-          type: f.type, 
-          size: f.size, 
-          uploadDate: new Date().toISOString(),
-          url: URL.createObjectURL(f) // Create a temporary URL for immediate download
-      }));
-      onChange({ files: [...(data.files || []), ...newCaseFiles] });
+      const files = e.target.files ? Array.from(e.target.files) as File[] : [];
+      processFiles(files);
+      e.target.value = ''; // Reset input
   };
 
-  // --- NEW: Handle Document Categorization ---
   const handleFileCategoryChange = (fileId: string, category: string) => {
-      // 1. Update the file category
       const updatedFiles = (data.files || []).map(f => 
           f.id === fileId ? { ...f, category } : f
       );
 
-      // 2. Automatically resolve pendency if exists
       let updatedMissingDocs = data.missingDocs || [];
       if (category && updatedMissingDocs.includes(category)) {
           updatedMissingDocs = updatedMissingDocs.filter(d => d !== category);
-          // Optional feedback toast could go here
       }
 
       onChange({ 
@@ -100,7 +147,7 @@ export const CaseFiles: React.FC<CaseFilesProps> = ({ data, onChange, commonDocs
   };
 
   const handleDeleteFile = (id: string) => { 
-      if(window.confirm('Remover este anexo?')) {
+      if(window.confirm('Remover este anexo permanentemente?')) {
           onChange({ files: data.files?.filter(f => f.id !== id) || [] }); 
       }
   };
@@ -114,7 +161,7 @@ export const CaseFiles: React.FC<CaseFilesProps> = ({ data, onChange, commonDocs
           link.click();
           document.body.removeChild(link);
       } else {
-          alert("Em um ambiente real, este arquivo seria baixado do servidor.");
+          alert("Arquivo corrompido ou URL inválida.");
       }
   };
 
@@ -166,7 +213,7 @@ export const CaseFiles: React.FC<CaseFilesProps> = ({ data, onChange, commonDocs
                         <button 
                             key={st.id} 
                             onClick={() => handleAddTag(st.label)}
-                            className={`text-[10px] px-2 py-0.5 rounded border hover:opacity-80 transition-opacity ${st.colorBg} ${st.colorText} border-transparent`}
+                            className={`text-[9px] px-2 py-0.5 rounded border hover:opacity-80 transition-opacity ${st.colorBg} ${st.colorText} border-transparent`}
                         >
                             + {st.label}
                         </button>
@@ -212,15 +259,21 @@ export const CaseFiles: React.FC<CaseFilesProps> = ({ data, onChange, commonDocs
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <Paperclip size={14}/> Documentos ({data.files?.length || 0})
                 </h3>
-                <label className="cursor-pointer bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1">
-                    <UploadCloud size={12}/> Adicionar
-                    <input type="file" multiple className="hidden" onChange={handleFileInput}/>
-                </label>
+                {isProcessing ? (
+                    <span className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                        <Loader2 size={12} className="animate-spin"/> Otimizando e Salvando...
+                    </span>
+                ) : (
+                    <label className="cursor-pointer bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1">
+                        <UploadCloud size={12}/> Adicionar
+                        <input type="file" multiple className="hidden" onChange={handleFileInput}/>
+                    </label>
+                )}
             </div>
 
             {(!data.files || data.files.length === 0) ? (
                 <div className="text-center py-8 text-slate-400 text-xs">
-                    Arraste arquivos aqui ou clique em Adicionar.
+                    Arraste arquivos aqui ou clique em Adicionar. (Imagens são comprimidas automaticamente).
                 </div>
             ) : (
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-1 kanban-scroll">

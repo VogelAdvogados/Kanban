@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Users } from 'lucide-react';
 import { Case } from '../types';
@@ -16,14 +17,17 @@ export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSe
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientKey, setSelectedClientKey] = useState<string | null>(null);
 
-  // 1. Group cases by Client
+  // 1. Group cases by Client (Optimized)
   const clients = useMemo(() => {
     const clientMap = new Map<string, ClientGroup>();
 
-    cases.forEach(c => {
-        const key = c.cpf ? c.cpf.replace(/\D/g, '') : c.clientName.toLowerCase().replace(/\s/g, '');
-        if (!key) return;
+    // Single pass through cases
+    for (const c of cases) {
+        // Create key efficiently
+        const key = c.cpf ? c.cpf.replace(/\D/g, '') : c.clientName.toLowerCase().trim();
+        if (!key) continue;
 
+        // Simplify active check
         const isActiveCase = !c.columnId.includes('arquiva') && !c.columnId.includes('concluido') && !c.columnId.includes('indeferido');
 
         if (!clientMap.has(key)) {
@@ -48,25 +52,31 @@ export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSe
             entry.cases.push(c);
             if (isActiveCase) entry.activeCasesCount += 1;
             
-            // Prefer newest data
-            if (new Date(c.lastUpdate).getTime() > new Date(entry.latestCase.lastUpdate).getTime()) {
+            // Prefer newest data without creating new Date objects excessively if not needed
+            if (c.lastUpdate > entry.latestCase.lastUpdate) {
                 entry.latestCase = c;
-                entry.name = c.clientName;
+                entry.name = c.clientName; // Update name to most recent
                 if(c.phone) entry.phone = c.phone;
                 if(c.birthDate) entry.birthDate = c.birthDate;
                 if(c.addressCity) entry.addressCity = c.addressCity;
                 if(c.addressState) entry.addressState = c.addressState;
                 entry.lastContactDate = c.lastUpdate;
             }
-            if(c.tags) entry.tags = [...new Set([...entry.tags, ...c.tags])];
+            // Merge tags using Set
+            if(c.tags && c.tags.length > 0) {
+                c.tags.forEach(t => {
+                    if(!entry.tags.includes(t)) entry.tags.push(t);
+                });
+            }
         }
-    });
+    }
 
-    return Array.from(clientMap.values()).sort((a, b) => new Date(b.lastContactDate).getTime() - new Date(a.lastContactDate).getTime());
-  }, [cases]);
+    return Array.from(clientMap.values()).sort((a, b) => b.lastContactDate.localeCompare(a.lastContactDate));
+  }, [cases]); // Only re-run if cases array reference changes
 
   // 2. Filter Clients
   const filteredClients = useMemo(() => {
+      if (!searchTerm) return clients;
       const term = searchTerm.toLowerCase();
       return clients.filter(c => 
           c.name.toLowerCase().includes(term) || 
@@ -75,8 +85,8 @@ export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSe
       );
   }, [clients, searchTerm]);
 
-  // Show only first 100 to avoid render lag, search to find more
-  const visibleClients = filteredClients.slice(0, 100);
+  // Virtualization limit for initial render
+  const visibleClients = filteredClients.slice(0, 50); 
 
   // 3. Selection Logic
   const selectedClient = useMemo(() => {

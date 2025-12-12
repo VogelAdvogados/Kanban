@@ -1,5 +1,7 @@
+
 import React from 'react';
 import { Users, CheckCircle, Clock, AlertOctagon } from 'lucide-react';
+import { Case } from '../../types';
 
 interface DashboardStats {
   total: number;
@@ -8,7 +10,7 @@ interface DashboardStats {
   upcomingDeadlinesCount: number;
 }
 
-export const DashboardKPIs: React.FC<{ stats: DashboardStats }> = React.memo(({ stats }) => {
+export const DashboardKPIs: React.FC<{ stats: DashboardStats, allCases?: Case[] }> = React.memo(({ stats }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">

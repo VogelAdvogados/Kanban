@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { MessageCircle, X, Send, Copy, FileText, ChevronRight } from 'lucide-react';
 import { Case, INSSAgency, WhatsAppTemplate } from '../types';
 import { WHATSAPP_TEMPLATES as DEFAULT_TEMPLATES } from '../constants';
-import { formatDate } from '../utils';
+import { formatDate, getLocationAddress } from '../utils';
 
 interface WhatsAppModalProps {
   data: Case;
@@ -30,9 +30,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         docsList = '\n- ' + data.missingDocs.join('\n- ');
     }
 
-    // Resolve Agency Address
-    const agency = agencies.find(a => a.name === data.periciaLocation);
-    const fullLocation = agency ? `${agency.name}\n📍 Endereço: ${agency.address}` : (data.periciaLocation || 'Agência do INSS');
+    // Resolve Location Address Smartly (INSS or Court)
+    const fullLocation = getLocationAddress(data.periciaLocation);
 
     return text
       .replace('{NOME}', data.clientName.split(' ')[0]) // Primeiro nome
@@ -48,12 +47,25 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   useEffect(() => {
     const template = availableTemplates.find(t => t.id === selectedTemplateId);
     
-    // Auto-select Pericia Template if data suggests it (Logic enhancement)
-    if (data.columnId === 'aux_pericia' && data.periciaDate && !message) { // Only auto-select if message empty to prevent overwrite
-        const periciaTpl = availableTemplates.find(t => t.category === 'PERICIA');
-        if (periciaTpl) {
-            setSelectedTemplateId(periciaTpl.id);
-            setMessage(hydrateTemplate(periciaTpl.text));
+    // Auto-select Pericia Template Logic
+    if (data.periciaDate && !message) {
+        let targetId = '';
+        
+        // 1. Judicial Expertise
+        if (data.columnId === 'jud_pericia') {
+            const judicialTpl = availableTemplates.find(t => t.id === 't_pericia_judicial');
+            if (judicialTpl) targetId = judicialTpl.id;
+        } 
+        // 2. INSS Expertise
+        else if (data.columnId === 'aux_pericia') {
+            const inssTpl = availableTemplates.find(t => t.id === 't_pericia_inss') || availableTemplates.find(t => t.category === 'PERICIA');
+            if (inssTpl) targetId = inssTpl.id;
+        }
+
+        if (targetId) {
+            setSelectedTemplateId(targetId);
+            const tpl = availableTemplates.find(t => t.id === targetId);
+            if(tpl) setMessage(hydrateTemplate(tpl.text));
             return;
         }
     }

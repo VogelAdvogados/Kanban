@@ -159,7 +159,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
     return (
         <div 
             className={`
-                flex-shrink-0 flex flex-col rounded-xl transition-all duration-200 relative
+                flex-shrink-0 flex flex-col rounded-2xl transition-all duration-200 relative
                 ${isZone 
                     ? `w-full h-[100px] cursor-default border-2 ${isDragOver ? zoneConfig?.hoverClass : `${zoneConfig?.colorClass} hover:shadow-md`}` 
                     : 'w-[280px] h-full bg-slate-100/50 border border-slate-200/60'
@@ -181,14 +181,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                      <p className="text-[10px] opacity-70 uppercase tracking-wide font-semibold mt-0.5">{zoneConfig.subLabel}</p>
                 </div>
             ) : (
-                <div className="p-3 flex items-center justify-between sticky top-0 z-10 rounded-t-xl bg-slate-100/90 backdrop-blur-sm border-b border-slate-200">
+                <div className="p-3 flex items-center justify-between sticky top-0 z-10 rounded-t-2xl bg-slate-100/80 backdrop-blur-md border-b border-slate-200/50">
                      <div className="flex items-center gap-2">
                          <div className={`w-2.5 h-2.5 rounded-full ${column.color.replace('border-', 'bg-')}`}></div>
                          <h3 className="font-bold text-xs uppercase tracking-wide text-slate-500">
                              {column.title}
                          </h3>
                      </div>
-                     <span className="bg-white px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-400 shadow-sm border border-slate-100">
+                     <span className="bg-white/80 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-400 shadow-sm border border-slate-100">
                          {cases.length}
                      </span>
                 </div>
@@ -196,7 +196,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
 
             {/* DRAG FEEDBACK OVERLAY (STANDARD COLUMNS ONLY) */}
             {isDragOver && !isZone && feedback && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-[1px] rounded-xl border-2 border-dashed border-blue-400 animate-in fade-in duration-200">
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-[1px] rounded-2xl border-2 border-dashed border-blue-400 animate-in fade-in duration-200">
                     <div className={`flex flex-col items-center gap-2 p-4 rounded-xl shadow-lg border ${feedback.color}`}>
                         <feedback.icon size={24} />
                         <span className="font-bold text-sm text-center">{feedback.label}</span>

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutGrid, ShieldCheck } from 'lucide-react';
+import { Scale, ShieldCheck } from 'lucide-react';
 
 export const LoadingScreen: React.FC = () => {
   return (
@@ -10,15 +10,15 @@ export const LoadingScreen: React.FC = () => {
         <div className="absolute bottom-[-10%] right-[-10%] w-[300px] h-[300px] bg-indigo-100 rounded-full blur-[60px] opacity-60"></div>
 
         <div className="relative z-10 flex flex-col items-center animate-in fade-in zoom-in duration-500">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center mb-6">
-                <LayoutGrid size={32} className="text-white animate-spin-slow" />
+            <div className="w-16 h-16 bg-blue-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center mb-6">
+                <Scale size={32} className="text-white animate-pulse" strokeWidth={2.5} />
             </div>
             
             <h1 className="text-2xl font-bold text-slate-800 tracking-tight mb-2">Rambo Prev</h1>
             <p className="text-sm text-slate-500 font-medium mb-8">Carregando escritório...</p>
 
             <div className="w-48 h-1 bg-slate-200 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full animate-progress"></div>
+                <div className="h-full bg-blue-700 rounded-full animate-progress"></div>
             </div>
             
             <div className="mt-8 flex items-center gap-2 text-xs text-slate-400 font-semibold">

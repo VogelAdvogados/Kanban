@@ -1,11 +1,14 @@
 
-import React, { useEffect } from 'react';
-import { FileText, Calendar, Award, ArrowRight, AlertTriangle, Clock, User, CornerUpLeft } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FileText, Calendar, Award, ArrowRight, AlertTriangle, Clock, User, CornerUpLeft, BarChart2 } from 'lucide-react';
 import { TransitionType, User as UserType, Case, INSSAgency } from '../types';
 import { ProtocolForm } from './transitions/ProtocolForm';
 import { ConclusionForm } from './transitions/ConclusionForm';
 import { DeadlineForm, PendencyForm } from './transitions/TaskForms';
 import { AppealReturnForm } from './transitions/AppealReturnForm';
+import { recommendResponsible } from '../utils'; // IMPORT NEW ALGORITHM
+import { db } from '../services/database';
+import { JUDICIAL_COURTS, DEFAULT_INSS_AGENCIES } from '../constants'; // Import Courts
 
 interface TransitionModalProps {
   type: TransitionType;
@@ -17,36 +20,50 @@ interface TransitionModalProps {
   setData: (data: any) => void;
   onConfirm: () => void;
   onCancel: () => void;
-  commonDocs?: string[]; // New
-  agencies?: INSSAgency[]; // New
+  commonDocs?: string[]; 
+  agencies?: INSSAgency[];
 }
 
 export const TransitionModal: React.FC<TransitionModalProps> = ({ 
     type, data, caseContext, currentResponsibleId, users, targetColumnId, setData, onConfirm, onCancel, commonDocs, agencies
 }) => {
   
-  // Initialize default data
+  // Suggested user based on load
+  const [suggestedUserId, setSuggestedUserId] = useState<string>('');
+  const [allCasesForLoad, setAllCasesForLoad] = useState<Case[]>([]);
+
   useEffect(() => {
-    const updates: any = {};
-    if(!data.newResponsibleId) updates.newResponsibleId = currentResponsibleId;
-    if(!data.missingDocs && type === 'PENDENCY') updates.missingDocs = [];
-    if (!data.benefitDate && type === 'CONCLUSION_NB') {
-        updates.benefitDate = new Date().toISOString().slice(0, 10);
-    }
-    if (type === 'APPEAL_RETURN') {
-        if (data.createSpecialTask === undefined) updates.createSpecialTask = true;
-        if (!data.appealOutcome) updates.appealOutcome = 'IMPROVIDO'; // Default
-    }
-    if (Object.keys(updates).length > 0) {
-        setData({ ...data, ...updates });
-    }
-  }, []); // Run once on mount
+    // Fetch cases for load balancing calculation
+    db.getCases().then(c => {
+        setAllCasesForLoad(c);
+        const bestUser = recommendResponsible(users, c);
+        setSuggestedUserId(bestUser);
+        
+        // Initialize default data
+        const updates: any = {};
+        if(!data.newResponsibleId) updates.newResponsibleId = bestUser || currentResponsibleId; // Smart Default
+        if(!data.missingDocs && type === 'PENDENCY') updates.missingDocs = [];
+        if (!data.benefitDate && type === 'CONCLUSION_NB') {
+            updates.benefitDate = new Date().toISOString().slice(0, 10);
+        }
+        if (type === 'APPEAL_RETURN') {
+            if (data.createSpecialTask === undefined) updates.createSpecialTask = true;
+            if (!data.appealOutcome) updates.appealOutcome = 'IMPROVIDO'; 
+        }
+        if (Object.keys(updates).length > 0) {
+            setData({ ...data, ...updates });
+        }
+    });
+  }, []); 
 
   const handleDataChange = (updates: any) => {
       setData({ ...data, ...updates });
   };
 
-  // Configuração Visual Baseada no Tipo
+  // Determine correct location list (INSS Agencies vs Judicial Courts)
+  const activeLocations = targetColumnId === 'jud_pericia' ? JUDICIAL_COURTS : (agencies || DEFAULT_INSS_AGENCIES);
+
+  // Visual Config
   let title = 'Dados da Transição';
   let Icon = FileText;
   let color = 'text-blue-500';
@@ -54,10 +71,22 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
 
   switch(type) {
       case 'PROTOCOL_INSS':
-          title = targetColumnId === 'aux_pericia' ? 'Agendamento de Perícia' : 'Novo Protocolo INSS';
-          Icon = targetColumnId === 'aux_pericia' ? Clock : FileText;
-          color = targetColumnId === 'aux_pericia' ? 'text-orange-500' : 'text-blue-600';
-          description = targetColumnId === 'aux_pericia' ? 'Registre o protocolo e a data do agendamento.' : 'O processo foi protocolado. Registre os dados.';
+          if (targetColumnId === 'aux_pericia') {
+              title = 'Agendamento de Perícia INSS';
+              Icon = Clock;
+              color = 'text-orange-500';
+              description = 'Registre o protocolo e a data do agendamento no INSS.';
+          } else if (targetColumnId === 'jud_pericia') {
+              title = 'Agendamento de Perícia Judicial';
+              Icon = Clock;
+              color = 'text-orange-500';
+              description = 'Informe data, hora e a Vara Federal.';
+          } else {
+              title = 'Novo Protocolo';
+              Icon = FileText;
+              color = 'text-blue-600';
+              description = 'O processo foi protocolado. Registre os dados.';
+          }
           break;
       case 'PROTOCOL_APPEAL':
           if (targetColumnId === 'rec_camera') {
@@ -130,7 +159,14 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
             
             <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1 kanban-scroll">
                 {(type === 'PROTOCOL_INSS' || type === 'PROTOCOL_APPEAL') && (
-                    <ProtocolForm type={type} data={data} onChange={handleDataChange} targetColumnId={targetColumnId} agencies={agencies} />
+                    <ProtocolForm 
+                        type={type} 
+                        data={data} 
+                        onChange={handleDataChange} 
+                        targetColumnId={targetColumnId} 
+                        agencies={activeLocations} // Pass correct list (INSS vs Courts)
+                        allCases={allCasesForLoad} 
+                    />
                 )}
                 
                 {type === 'CONCLUSION_NB' && (
@@ -149,11 +185,18 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                     <AppealReturnForm data={data} onChange={handleDataChange} />
                 )}
 
-                {/* Handover Section */}
+                {/* Handover Section with Smart Recommendation */}
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mt-4">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
-                        <User size={12}/> Com quem fica o processo agora?
-                    </label>
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <User size={12}/> Responsável Próxima Etapa
+                        </label>
+                        {suggestedUserId && (
+                            <span className="text-[9px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 flex items-center gap-1">
+                                <BarChart2 size={10}/> Sugestão: {users.find(u => u.id === suggestedUserId)?.name.split(' ')[0]}
+                            </span>
+                        )}
+                    </div>
                     <select 
                         value={data.newResponsibleId} 
                         onChange={(e) => handleDataChange({ newResponsibleId: e.target.value })}
@@ -161,7 +204,7 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                     >
                         {users.map(u => (
                             <option key={u.id} value={u.id}>
-                                {u.name} ({u.role === 'LAWYER' ? 'Adv.' : u.role === 'SECRETARY' ? 'Sec.' : 'Outro'})
+                                {u.name} {u.id === suggestedUserId ? ' (Recomendado)' : ''}
                             </option>
                         ))}
                     </select>

@@ -69,7 +69,6 @@ export const ManagementHub: React.FC<ManagementHubProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<HubTab>(initialTab);
 
-  // Sync internal tab if initialTab prop changes
   useEffect(() => {
       setActiveTab(initialTab);
   }, [initialTab]);

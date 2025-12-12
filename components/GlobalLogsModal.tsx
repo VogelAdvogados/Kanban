@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { X, Search, Filter, User, ExternalLink, Activity, Settings, FileText } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, Search, Filter, ExternalLink, Activity, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Case, User as UserType, SystemLog } from '../types';
 
 interface GlobalLogsModalProps {
@@ -31,9 +31,9 @@ export const GlobalLogsModal: React.FC<GlobalLogsModalProps> = ({ cases, users, 
   const [userFilter, setUserFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'CASE' | 'SYSTEM'>('ALL');
   
-  // Virtualization State
-  const [displayLimit, setDisplayLimit] = useState(50);
-  const observerTarget = useRef<HTMLTableRowElement>(null);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   // 1. Flatten Case Logs and Merge with System Logs
   const allLogs = useMemo(() => {
@@ -82,28 +82,17 @@ export const GlobalLogsModal: React.FC<GlobalLogsModalProps> = ({ cases, users, 
     });
   }, [allLogs, searchTerm, userFilter, typeFilter]);
 
-  // 3. Slice for View
-  const visibleLogs = useMemo(() => {
-      return filteredLogs.slice(0, displayLimit);
-  }, [filteredLogs, displayLimit]);
-
-  // Infinite Scroll Observer
+  // Reset pagination when filters change
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setDisplayLimit((prev) => Math.min(prev + 50, filteredLogs.length));
-        }
-      },
-      { threshold: 1.0 }
-    );
+      setCurrentPage(1);
+  }, [searchTerm, userFilter, typeFilter]);
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
-
-    return () => observer.disconnect();
-  }, [filteredLogs.length]);
+  // 3. Slice for View (Pagination)
+  const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
+  const visibleLogs = useMemo(() => {
+      const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+      return filteredLogs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredLogs, currentPage]);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -249,14 +238,41 @@ export const GlobalLogsModal: React.FC<GlobalLogsModalProps> = ({ cases, users, 
                         );
                     })}
                     
-                    {visibleLogs.length < filteredLogs.length && (
-                         <tr ref={observerTarget}>
-                             <td colSpan={6} className="py-4 text-center text-slate-400 text-xs">Carregando mais...</td>
+                    {visibleLogs.length === 0 && (
+                         <tr>
+                             <td colSpan={6} className="py-8 text-center text-slate-400 text-sm">Nenhum registro encontrado.</td>
                          </tr>
                     )}
                 </tbody>
             </table>
         </div>
+
+        {/* PAGINATION FOOTER */}
+        <div className="bg-white border-t border-slate-200 p-3 flex justify-between items-center flex-shrink-0">
+            <span className="text-xs text-slate-500">
+                Mostrando <strong>{visibleLogs.length}</strong> de <strong>{filteredLogs.length}</strong> registros
+            </span>
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 text-slate-600"
+                >
+                    <ChevronLeft size={20}/>
+                </button>
+                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                    {currentPage} / {totalPages || 1}
+                </span>
+                <button 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 text-slate-600"
+                >
+                    <ChevronRight size={20}/>
+                </button>
+            </div>
+        </div>
+
       </div>
     </div>
   );

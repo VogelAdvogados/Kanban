@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Users, Database, Building, FileText, Sliders, Tag, CheckCircle, AlertTriangle, Shield, MapPin, MessageCircle, Workflow } from 'lucide-react';
+import { X, Users, Database, Building, FileText, Sliders, Tag, CheckCircle, AlertTriangle, Shield, MapPin, MessageCircle, Workflow, UserCircle } from 'lucide-react';
 import { Case, User, DocumentTemplate, SystemLog, OfficeData, SystemSettings, SystemTag, INSSAgency, WhatsAppTemplate, WorkflowRule } from '../types';
 import { TemplateManager } from './settings/TemplateManager';
 import { TagManager } from './settings/TagManager';
@@ -11,6 +11,7 @@ import { BackupSettings } from './settings/BackupSettings';
 import { AgencySettings } from './settings/AgencySettings';
 import { WhatsAppSettings } from './settings/WhatsAppSettings';
 import { WorkflowSettings } from './settings/WorkflowSettings';
+import { UserProfileSettings } from './settings/UserProfileSettings';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -56,7 +57,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     whatsAppTemplates = [], setWhatsAppTemplates = (_: WhatsAppTemplate[]) => {},
     workflowRules = [], setWorkflowRules = (_: WorkflowRule[]) => {}
 }) => {
-  const [activeTab, setActiveTab] = useState<'OFFICE' | 'TEAM' | 'BACKUP' | 'DOCUMENTS' | 'AUTOMATION' | 'TAGS' | 'AGENCIES' | 'WHATSAPP' | 'WORKFLOW'>('OFFICE');
+  const [activeTab, setActiveTab] = useState<'PROFILE' | 'OFFICE' | 'TEAM' | 'BACKUP' | 'DOCUMENTS' | 'AUTOMATION' | 'TAGS' | 'AGENCIES' | 'WHATSAPP' | 'WORKFLOW'>('PROFILE');
   
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -131,6 +132,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* SIDEBAR */}
             <div className="w-60 bg-slate-50 border-r border-slate-200 p-3 space-y-1 hidden md:block flex-shrink-0">
                 <button 
+                    onClick={() => setActiveTab('PROFILE')}
+                    className={`w-full text-left p-3 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'PROFILE' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                    <UserCircle size={18}/> MEU PERFIL
+                </button>
+                
+                <div className="h-px bg-slate-200 my-2 mx-2"></div>
+                <p className="px-3 text-[10px] font-bold text-slate-400 uppercase mb-1">Geral</p>
+
+                <button 
                     onClick={() => setActiveTab('OFFICE')}
                     className={`w-full text-left p-3 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'OFFICE' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
@@ -188,15 +199,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* MOBILE TAB BAR */}
             <div className="md:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-10 overflow-x-auto">
+                 <button onClick={() => setActiveTab('PROFILE')} className={`p-2 ${activeTab === 'PROFILE' ? 'text-blue-600' : 'text-slate-400'}`}><UserCircle size={20}/></button>
                  <button onClick={() => setActiveTab('OFFICE')} className={`p-2 ${activeTab === 'OFFICE' ? 'text-blue-600' : 'text-slate-400'}`}><Building size={20}/></button>
                  <button onClick={() => setActiveTab('WORKFLOW')} className={`p-2 ${activeTab === 'WORKFLOW' ? 'text-indigo-600' : 'text-slate-400'}`}><Workflow size={20}/></button>
                  <button onClick={() => setActiveTab('WHATSAPP')} className={`p-2 ${activeTab === 'WHATSAPP' ? 'text-blue-600' : 'text-slate-400'}`}><MessageCircle size={20}/></button>
-                 <button onClick={() => setActiveTab('TEAM')} className={`p-2 ${activeTab === 'TEAM' ? 'text-blue-600' : 'text-slate-400'}`}><Users size={20}/></button>
             </div>
 
             {/* CONTENT */}
             <div className="flex-1 p-8 overflow-y-auto bg-white mb-10 md:mb-0">
                 
+                {/* TAB: USER PROFILE */}
+                {activeTab === 'PROFILE' && currentUser && (
+                    <UserProfileSettings 
+                        currentUser={currentUser}
+                        users={users}
+                        setUsers={setUsers}
+                        showToast={showToast}
+                    />
+                )}
+
                 {/* TAB: OFFICE DATA */}
                 {activeTab === 'OFFICE' && (
                     <OfficeSettings 

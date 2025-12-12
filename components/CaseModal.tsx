@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Save, Clock, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
-import { Case, User as UserType } from '../types';
+import { Case, User as UserType, WhatsAppTemplate } from '../types';
 import { VIEW_CONFIG } from '../constants';
 import { getPredictiveInsights, validateCPF, generateDiffLog } from '../utils';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -22,10 +22,11 @@ interface CaseModalProps {
   onSelectCase: (c: Case) => void; 
   onOpenWhatsApp?: (c: Case) => void; 
   onOpenDocumentGenerator?: (c: Case) => void;
-  commonDocs?: string[]; // New
+  commonDocs?: string[]; 
+  whatsAppTemplates?: WhatsAppTemplate[]; // New prop
 }
 
-export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isOpen, onClose, onSave, onOpenWhatsApp, onOpenDocumentGenerator, commonDocs }) => {
+export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isOpen, onClose, onSave, onOpenWhatsApp, onOpenDocumentGenerator, commonDocs, whatsAppTemplates }) => {
   const [formData, setFormData] = useState<Case>({ ...data, tags: data.tags || [] });
   const [pendingNote, setPendingNote] = useState('');
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
@@ -284,12 +285,13 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
             <CaseTimeline 
                 data={formData} 
                 onChange={updateFormData} 
+                whatsAppTemplates={whatsAppTemplates} // Pass templates here
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
                 <CaseFiles 
                     data={formData} 
                     onChange={updateFormData} 
-                    commonDocs={commonDocs} // New prop
+                    commonDocs={commonDocs} 
                 />
                 <CaseHistory 
                     data={formData} 

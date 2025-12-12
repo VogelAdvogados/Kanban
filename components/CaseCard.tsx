@@ -80,9 +80,6 @@ export const CaseCard: React.FC<CaseCardProps> = React.memo(({
       const alertDays = systemSettings.pp_alert_days || 15;
       const isCritical = diffDays <= alertDays && diffDays >= 0;
       
-      // Calculate progress (assuming 120 days benefit duration as base or from protocol)
-      // For simplicity, we just visualize urgency
-      
       return { diffDays, isCritical, alertDays };
   }, [data.dcbDate, systemSettings.pp_alert_days]);
 
@@ -275,10 +272,10 @@ export const CaseCard: React.FC<CaseCardProps> = React.memo(({
         }}
         onDragEnd={onDragEnd}
         onClick={onClick}
-        className={`group relative rounded-lg cursor-pointer transition-all duration-200 select-none overflow-hidden
+        className={`group relative rounded-xl cursor-pointer transition-all duration-300 select-none overflow-hidden animate-scale-in
             ${isDragging 
                 ? 'bg-slate-50 border-2 border-dashed border-slate-300 opacity-50 shadow-none' 
-                : 'bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300'
+                : 'bg-white border border-slate-200/60 shadow-sm hover:shadow-lg hover:border-blue-300 hover:-translate-y-1'
             }
         `}
         >
@@ -288,7 +285,6 @@ export const CaseCard: React.FC<CaseCardProps> = React.memo(({
             <div className="absolute top-0 right-0 z-0 opacity-20 pointer-events-none">
                 <svg width="80" height="80" viewBox="0 0 100 100" className="text-slate-900 fill-current">
                     <path d="M100,0 L0,0 L0,100 Z" fill="none" />
-                    {/* Simplified Cobweb lines */}
                     <path d="M100,0 L50,50 M80,0 L40,40 M60,0 L30,30 M100,20 L60,60 M100,40 L70,70" stroke="currentColor" strokeWidth="1" />
                     <path d="M70,10 Q60,20 80,30 Q90,40 95,20" stroke="currentColor" strokeWidth="0.5" fill="none"/>
                     <path d="M50,10 Q40,20 50,30 Q60,40 70,30" stroke="currentColor" strokeWidth="0.5" fill="none"/>
@@ -406,17 +402,19 @@ export const CaseCard: React.FC<CaseCardProps> = React.memo(({
                 </div>
             )}
 
-            {/* PERICIA PREVIEW */}
-            {data.columnId === 'aux_pericia' && data.periciaDate && (
+            {/* PERICIA PREVIEW (Updated for Judicial) */}
+            {(data.columnId === 'aux_pericia' || data.columnId === 'jud_pericia') && data.periciaDate && (
                 <div className="bg-orange-50 border border-orange-200 rounded p-1.5 mt-1 flex items-center gap-2">
                     <div className="bg-white p-1 rounded text-orange-600">
                         <Clock size={12}/>
                     </div>
-                    <div>
-                        <p className="text-[9px] font-bold text-orange-800 uppercase">Perícia Agendada</p>
-                        <p className="text-[10px] text-orange-900">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-bold text-orange-800 uppercase truncate">
+                            {data.columnId === 'jud_pericia' ? 'Perícia Judicial' : 'Perícia Agendada'}
+                        </p>
+                        <p className="text-[10px] text-orange-900 leading-tight truncate">
                             {new Date(data.periciaDate).toLocaleDateString('pt-BR')}
-                            {data.periciaTime ? ` às ${data.periciaTime}` : ''}
+                            {data.periciaTime ? ` • ${data.periciaTime}` : ''}
                         </p>
                     </div>
                 </div>

@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Case, ViewType, TransitionType, Task, Notification, DocumentTemplate, SystemLog, User, SystemTag, INSSAgency, WhatsAppTemplate, WorkflowRule, Appointment } from '../types';
 import { COLUMNS_BY_VIEW, TRANSITION_RULES, COMMON_DOCUMENTS, DEFAULT_INSS_AGENCIES, WHATSAPP_TEMPLATES as DEFAULT_WA_TEMPLATES } from '../constants';
-import { getAutomaticUpdatesForColumn, getAge } from '../utils';
+import { getAutomaticUpdatesForColumn, getAge, analyzeCaseHealth, getDaysDiff, buildSearchIndex, searchCasesByIndex } from '../utils';
 import { db } from '../services/database';
 
 export const useKanban = () => {
@@ -41,7 +41,7 @@ export const useKanban = () => {
     const initData = async () => {
       setIsLoading(true);
       try {
-        const [loadedCases, loadedNotifs, loadedTemplates, loadedLogs, loadedTags, loadedDocs, loadedAgencies, loadedWaTemplates, loadedWorkflow, loadedAppointments] = await Promise.all([
+        const [loadedCases, loadedNotifs, loadedTemplates, loadedLogs, loadedTags, loadedDocs, loadedAgencies, loadedWaTemplates, loadedWorkflow, loadedAppointments, loadedSettings] = await Promise.all([
           db.getCases(),
           db.getNotifications(),
           db.getTemplates(),
@@ -51,7 +51,8 @@ export const useKanban = () => {
           db.getAgencies(),
           db.getWhatsAppTemplates(),
           db.getWorkflowRules(),
-          db.getAppointments()
+          db.getAppointments(),
+          db.getSystemSettings()
         ]);
         
         setCases(loadedCases);
@@ -64,6 +65,11 @@ export const useKanban = () => {
         setWhatsAppTemplates(loadedWaTemplates);
         setWorkflowRules(loadedWorkflow);
         setAppointments(loadedAppointments);
+
+        // --- DAILY AUTOMATION RUNNER (ROBÔ DE ROTINA) ---
+        // Runs once on startup to check deadlines and health
+        runDailyRoutine(loadedCases, loadedSettings, loadedNotifs);
+
       } catch (err) {
         console.error("Failed to initialize system", err);
         setError("Falha ao carregar dados do sistema.");
@@ -74,6 +80,125 @@ export const useKanban = () => {
 
     initData();
   }, []);
+
+  // --- AUTOMATION RUNNER LOGIC ---
+  const runDailyRoutine = (currentCases: Case[], settings: any, currentNotifs: Notification[]) => {
+      const today = new Date().toISOString().slice(0,10);
+      const lastRun = localStorage.getItem('rambo_daily_run');
+      
+      // Prevent running multiple times per day (simple check)
+      if (lastRun === today) return; 
+
+      let newAlerts: Notification[] = [];
+      let criticalCount = 0;
+      let deadlineCount = 0;
+      let periciaCount = 0; // NEW: Track expertise
+      let ppCount = 0;
+
+      currentCases.forEach(c => {
+          // 1. Check Deadlines (7 days)
+          const daysToDeadline = getDaysDiff(c.deadlineEnd);
+          if (daysToDeadline !== null && daysToDeadline >= 0 && daysToDeadline <= 7) {
+              deadlineCount++;
+              if (daysToDeadline <= 3) {
+                  newAlerts.push({
+                      id: `alert_dl_${c.id}_${Date.now()}`,
+                      title: 'Prazo Fatal Iminente',
+                      description: `O processo ${c.clientName} vence em ${daysToDeadline === 0 ? 'HOJE' : daysToDeadline + ' dias'}!`,
+                      type: 'ALERT',
+                      timestamp: new Date().toISOString(),
+                      isRead: false,
+                      caseId: c.id,
+                      recipientId: c.responsibleId
+                  });
+              }
+          }
+
+          // 2. Check UPCOMING PERICIA (NEW)
+          if (c.periciaDate) {
+              const pDate = new Date(c.periciaDate);
+              const now = new Date();
+              // Normalize times
+              pDate.setHours(0,0,0,0);
+              const checkNow = new Date();
+              checkNow.setHours(0,0,0,0);
+              
+              const diffTime = pDate.getTime() - checkNow.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              if (diffDays >= 0 && diffDays <= 2) {
+                  periciaCount++;
+                  newAlerts.push({
+                      id: `alert_pericia_${c.id}_${Date.now()}`,
+                      title: '🔔 Lembrar Perícia',
+                      description: `${diffDays === 0 ? 'HOJE' : diffDays === 1 ? 'AMANHÃ' : 'Em 2 dias'}: ${c.clientName}. Avise o cliente!`,
+                      type: 'WARNING',
+                      timestamp: new Date().toISOString(),
+                      isRead: false,
+                      caseId: c.id,
+                      recipientId: c.responsibleId
+                  });
+              }
+          }
+
+          // 3. Check DCB / Extension (NEW LOGIC)
+          if ((c.columnId === 'aux_ativo' || c.columnId === 'adm_pagamento') && c.dcbDate && !c.isExtension) {
+              const dcbDiff = getDaysDiff(c.dcbDate);
+              // Alert range: between 15 and 0 days
+              const alertRange = settings.pp_alert_days || 15;
+              
+              if (dcbDiff !== null && dcbDiff <= alertRange && dcbDiff >= 0) {
+                  ppCount++;
+                  // Only alert if we haven't already created a specific task for this
+                  const hasPPTask = c.tasks?.some(t => t.text.includes('Prorrogação') || t.text.includes('PP'));
+                  
+                  if (!hasPPTask) {
+                      newAlerts.push({
+                          id: `alert_pp_${c.id}_${Date.now()}`,
+                          title: '⏳ DCB Próxima: Prorrogação?',
+                          description: `Benefício de ${c.clientName} cessa em ${dcbDiff} dias. Verifique se precisa de PP.`,
+                          type: 'WARNING',
+                          timestamp: new Date().toISOString(),
+                          isRead: false,
+                          caseId: c.id,
+                          recipientId: c.responsibleId
+                      });
+                      
+                      // Auto-Create Task Logic is safer to do inside the Case update loop or here if we had write access
+                      // Since we can't easily write to DB here without causing re-renders loop if not careful,
+                      // we just rely on notification. Ideally, the backend does this.
+                  }
+              }
+          }
+
+          // 4. Check Health (Stagnation)
+          const health = analyzeCaseHealth(c, settings);
+          if (health.status === 'CRITICAL' || health.status === 'COBWEB') {
+              criticalCount++;
+          }
+      });
+
+      // 5. Create Daily Summary Notification
+      if (criticalCount > 0 || deadlineCount > 0 || periciaCount > 0 || ppCount > 0) {
+          newAlerts.push({
+              id: `daily_summary_${Date.now()}`,
+              title: 'Resumo Diário do Robô',
+              description: `Bom dia! Hoje temos ${deadlineCount} prazos, ${periciaCount} perícias, ${ppCount} alertas de DCB e ${criticalCount} casos críticos.`,
+              type: 'INFO',
+              timestamp: new Date().toISOString(),
+              isRead: false
+          });
+      }
+
+      if (newAlerts.length > 0) {
+          const updatedNotifs = [...newAlerts, ...currentNotifs].slice(0, 50);
+          setNotifications(updatedNotifs);
+          db.saveNotifications(updatedNotifs);
+      }
+
+      localStorage.setItem('rambo_daily_run', today);
+      console.log("Daily Routine executed.");
+  };
 
   // --- PERSISTENCE WRAPPERS ---
   const updateTemplates = async (newTemplates: DocumentTemplate[]) => {
@@ -174,93 +299,53 @@ export const useKanban = () => {
   };
 
   // --- NEW: WORKFLOW ENGINE (Conditions & Actions) ---
-  
-  // Evaluates a single condition against a case
   const checkCondition = (c: Case, condition: any): boolean => {
       switch (condition.type) {
-          case 'TAG_CONTAINS':
-              return (c.tags || []).includes(condition.value);
-          case 'BENEFIT_TYPE':
-              return c.benefitType === condition.value;
-          case 'FIELD_EMPTY':
-              return !c[condition.value as keyof Case] || c[condition.value as keyof Case] === '';
-          case 'FIELD_NOT_EMPTY':
-              return !!c[condition.value as keyof Case];
-          case 'URGENCY_IS':
-              return c.urgency === condition.value;
-          default:
-              return false;
+          case 'TAG_CONTAINS': return (c.tags || []).includes(condition.value);
+          case 'BENEFIT_TYPE': return c.benefitType === condition.value;
+          case 'FIELD_EMPTY': return !c[condition.value as keyof Case] || c[condition.value as keyof Case] === '';
+          case 'FIELD_NOT_EMPTY': return !!c[condition.value as keyof Case];
+          case 'URGENCY_IS': return c.urgency === condition.value;
+          default: return false;
       }
   };
 
-  // 1. Validation Engine (Blocks movement)
   const validateWorkflow = (c: Case, targetColId: string): string | null => {
-      // Find rules for this trigger
-      const relevantRules = workflowRules.filter(r => 
-          r.isActive && 
-          r.trigger === 'COLUMN_ENTER' && 
-          r.targetColumnId === targetColId
-      );
-
+      const relevantRules = workflowRules.filter(r => r.isActive && r.trigger === 'COLUMN_ENTER' && r.targetColumnId === targetColId);
       for (const rule of relevantRules) {
-          // Check conditions (ALL conditions must be met for the rule to apply)
           const conditionsMet = rule.conditions.length === 0 || rule.conditions.every(cond => checkCondition(c, cond));
-          
           if (conditionsMet) {
-              // Check for BLOCK_MOVE actions
               const blocker = rule.actions.find(a => a.type === 'BLOCK_MOVE');
-              if (blocker) {
-                  return blocker.payload || 'Movimentação bloqueada por regra de automação.';
-              }
+              if (blocker) return blocker.payload || 'Movimentação bloqueada por regra de automação.';
           }
       }
-      return null; // No blocks
+      return null;
   };
 
-  // 2. Execution Engine (Applies side effects)
   const applyWorkflowActions = (c: Case, targetColId: string, updates: Partial<Case>, log: string): { updates: Partial<Case>, log: string } => {
-      const relevantRules = workflowRules.filter(r => 
-          r.isActive && 
-          r.trigger === 'COLUMN_ENTER' && 
-          r.targetColumnId === targetColId
-      );
-
+      const relevantRules = workflowRules.filter(r => r.isActive && r.trigger === 'COLUMN_ENTER' && r.targetColumnId === targetColId);
       let newUpdates = { ...updates };
       let newLog = log;
 
       for (const rule of relevantRules) {
           const conditionsMet = rule.conditions.length === 0 || rule.conditions.every(cond => checkCondition(c, cond));
-          
           if (conditionsMet) {
               rule.actions.forEach(action => {
                   if (action.type === 'ADD_TASK') {
                       const taskText = action.payload;
                       const currentTasks = c.tasks || [];
-                      // Prevent duplicate tasks
                       if (!currentTasks.some(t => t.text === taskText) && !newUpdates.tasks?.some(t => t.text === taskText)) {
-                          const newTask: Task = {
-                              id: `t_wf_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
-                              text: taskText,
-                              completed: false
-                          };
-                          // Merge with existing updates or existing case tasks
+                          const newTask: Task = { id: `t_wf_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, text: taskText, completed: false };
                           const baseTasks = newUpdates.tasks || c.tasks || [];
                           newUpdates.tasks = [...baseTasks, newTask];
                           newLog += ` | Tarefa criada: ${taskText}`;
                       }
-                  } else if (action.type === 'SET_RESPONSIBLE') {
-                      newUpdates.responsibleId = action.payload;
-                      newLog += ` | Responsável alterado (Automático).`;
-                  } else if (action.type === 'SET_URGENCY') {
-                      newUpdates.urgency = action.payload;
-                      newLog += ` | Urgência definida para ${action.payload}.`;
-                  } else if (action.type === 'ADD_TAG') {
+                  } else if (action.type === 'SET_RESPONSIBLE') { newUpdates.responsibleId = action.payload; newLog += ` | Responsável alterado (Automático).`; }
+                  else if (action.type === 'SET_URGENCY') { newUpdates.urgency = action.payload; newLog += ` | Urgência definida para ${action.payload}.`; }
+                  else if (action.type === 'ADD_TAG') {
                       const tagToAdd = action.payload;
                       const currentTags = newUpdates.tags || c.tags || [];
-                      if (!currentTags.includes(tagToAdd)) {
-                          newUpdates.tags = [...currentTags, tagToAdd];
-                          newLog += ` | Etiqueta adicionada: ${tagToAdd}`;
-                      }
+                      if (!currentTags.includes(tagToAdd)) { newUpdates.tags = [...currentTags, tagToAdd]; newLog += ` | Etiqueta adicionada: ${tagToAdd}`; }
                   } else if (action.type === 'SEND_NOTIFICATION') {
                       const msg = action.payload;
                       addNotification('Alerta de Automação', `${msg} (Caso: ${c.clientName})`, 'WARNING', c.id, c.responsibleId);
@@ -276,18 +361,10 @@ export const useKanban = () => {
   const addAppointment = async (appt: Appointment) => {
       const exists = appointments.find(a => a.id === appt.id);
       let updatedList;
-      if (exists) {
-          updatedList = appointments.map(a => a.id === appt.id ? appt : a);
-      } else {
+      if (exists) { updatedList = appointments.map(a => a.id === appt.id ? appt : a); }
+      else {
           updatedList = [...appointments, appt];
-          // Also add notification for lawyer
-          addNotification(
-              'Novo Agendamento', 
-              `Cliente ${appt.clientName} agendado para ${new Date(appt.date).toLocaleDateString()} às ${new Date(appt.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}.`,
-              'INFO',
-              appt.caseId,
-              appt.lawyerId
-          );
+          addNotification('Novo Agendamento', `Cliente ${appt.clientName} agendado para ${new Date(appt.date).toLocaleDateString()} às ${new Date(appt.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}.`, 'INFO', appt.caseId, appt.lawyerId);
       }
       setAppointments(updatedList);
       await db.saveAppointment(appt);
@@ -300,144 +377,117 @@ export const useKanban = () => {
       if (target) await db.saveAppointment({ ...target, status: 'CANCELLED' });
   };
 
+  // --- INTEGRATION: SYNC CASE PERICIA TO APPOINTMENT ---
+  const syncPericiaToCalendar = async (c: Case) => {
+      if (!c.periciaDate) return;
+
+      const periciaTime = new Date(c.periciaDate);
+      const existingAppt = appointments.find(a => a.caseId === c.id && (a.type === 'PERICIA' || a.notes?.includes('Perícia')));
+      
+      const appt: Appointment = {
+          id: existingAppt ? existingAppt.id : `appt_auto_${Date.now()}`,
+          caseId: c.id,
+          clientName: c.clientName,
+          lawyerId: c.responsibleId,
+          date: c.periciaDate,
+          type: 'VISIT', // Use Visit icon for Pericia
+          notes: `PERÍCIA ${c.columnId === 'jud_pericia' ? 'JUDICIAL' : 'ADMINISTRATIVA'}: ${c.periciaLocation || 'Local não informado'}`,
+          status: 'SCHEDULED',
+          createdAt: new Date().toISOString()
+      };
+
+      // Add task reminder if doesn't exist
+      let taskUpdates: Partial<Case> = {};
+      const reminderText = "Lembrar cliente da Perícia (WhatsApp)";
+      if (!c.tasks?.some(t => t.text === reminderText)) {
+          const newTask: Task = { id: `t_reminder_${Date.now()}`, text: reminderText, completed: false };
+          taskUpdates.tasks = [...(c.tasks || []), newTask];
+      }
+
+      await addAppointment(appt);
+      if (taskUpdates.tasks) {
+          await updateCase({ ...c, ...taskUpdates }, "Integração: Perícia sincronizada na Agenda + Tarefa criada.", "Sistema", "Automação");
+      }
+  };
+
   // --- CRUD ACTIONS (ASYNC) ---
   const addCase = async (newCase: Case, userName: string) => {
       setIsSaving(true);
       try {
           const autoTags = applyAutoTags(newCase);
           const caseWithTags = { ...newCase, tags: autoTags };
-          
           setCases(prev => [caseWithTags, ...prev]);
-          
           await db.saveCase(caseWithTags);
           addSystemLog('Criação de Caso', `Novo caso criado: ${newCase.clientName} (#${newCase.internalId})`, userName, 'SYSTEM');
-      } catch (e) {
-          setError("Erro ao salvar novo caso.");
-      } finally {
-          setIsSaving(false);
-      }
+      } catch (e) { setError("Erro ao salvar novo caso."); } finally { setIsSaving(false); }
   };
 
   const updateCase = async (updatedCase: Case, logMessage?: string, userName?: string, actionType: string = 'Edição') => {
-      // Generate new log item if provided
       let newLogItem: any = null;
       if (logMessage && userName) {
-          newLogItem = {
-              id: `h_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-              date: new Date().toISOString(),
-              user: userName,
-              action: actionType,
-              details: logMessage
-          };
+          newLogItem = { id: `h_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, date: new Date().toISOString(), user: userName, action: actionType, details: logMessage };
       }
 
       const autoTags = applyAutoTags(updatedCase);
       const partialCase = { ...updatedCase, tags: autoTags, lastUpdate: new Date().toISOString() };
 
-      // SMART MERGE STATE
       setCases(prev => prev.map(current => {
           if (current.id === partialCase.id) {
-              
-              // 1. Identify History from Server (Current State)
+              // History Merging Logic
               const serverHistory = current.history || [];
               const serverHistoryIds = new Set(serverHistory.map(h => h.id));
-
-              // 2. Identify New History added LOCALLY in the partialCase (e.g. from Modal)
               const incomingHistory = partialCase.history || [];
               const newLocalHistory = incomingHistory.filter(h => !serverHistoryIds.has(h.id));
-
-              // 3. Merge: Server History + New Local Items + The Log generated right now
               let finalHistory = [...serverHistory, ...newLocalHistory];
-              if (newLogItem) {
-                  finalHistory.push(newLogItem);
-              }
-
-              // 4. Sort to ensure time order
+              if (newLogItem) finalHistory.push(newLogItem);
               finalHistory.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
               const finalCase = { ...partialCase, history: finalHistory };
               
-              // Fire persistence
-              db.saveCase(finalCase).catch(err => {
-                  console.error("Save failed", err);
-                  setError("Erro ao salvar alterações. Verifique sua conexão.");
-              });
+              // TRIGGER SIDE EFFECTS
+              if (current.periciaDate !== finalCase.periciaDate && finalCase.periciaDate) {
+                  // If date changed, sync calendar (background)
+                  syncPericiaToCalendar(finalCase);
+              }
 
+              db.saveCase(finalCase).catch(err => { console.error("Save failed", err); setError("Erro ao salvar alterações. Verifique sua conexão."); });
               return finalCase;
           }
           return current;
       }));
   };
 
-  // --- DRAG AND DROP LOGIC ---
   const handleDrop = (targetColId: string, currentUser: User | null) => {
       if (!draggedCaseId || !currentUser) return;
       const c = cases.find(x => x.id === draggedCaseId);
       if (!c || c.columnId === targetColId) return;
 
-      // --- WORKFLOW VALIDATION (BLOCKER) ---
       const blockReason = validateWorkflow(c, targetColId);
-      if (blockReason) {
-          alert(`🚫 BLOQUEIO DE AUTOMAÇÃO\n\n${blockReason}`);
-          setDraggedCaseId(null);
-          return;
-      }
+      if (blockReason) { alert(`🚫 BLOQUEIO DE AUTOMAÇÃO\n\n${blockReason}`); setDraggedCaseId(null); return; }
 
       const rule = TRANSITION_RULES.find(r => (r.from === c.columnId || r.from === '*') && r.to === targetColId);
-      if (rule) {
-          setPendingMove({ caseId: c.id, targetColId });
-          setTransitionType(rule.type);
-          return;
-      }
+      if (rule) { setPendingMove({ caseId: c.id, targetColId }); setTransitionType(rule.type); return; }
 
-      // MANDADO DE SEGURANÇA (CLONE LOGIC)
       if (targetColId === 'zone_ms') {
-          const msCopy: Case = {
-              ...c,
-              id: `c_ms_${Date.now()}`,
-              internalId: generateInternalId(), // New ID for MS
-              view: 'JUDICIAL',
-              columnId: 'jud_triagem',
-              tags: [...(c.tags || []), 'MANDADO DE SEGURANÇA'],
-              createdAt: new Date().toISOString(),
-              lastUpdate: new Date().toISOString(),
-              history: [{
-                  id: `h_ms_start_${Date.now()}`,
-                  date: new Date().toISOString(),
-                  user: currentUser.name,
-                  action: 'Criação de MS',
-                  details: `Processo MS criado a partir do caso #${c.internalId}.`
-              }]
-          };
-          
+          const msCopy: Case = { ...c, id: `c_ms_${Date.now()}`, internalId: generateInternalId(), view: 'JUDICIAL', columnId: 'jud_triagem', tags: [...(c.tags || []), 'MANDADO DE SEGURANÇA'], createdAt: new Date().toISOString(), lastUpdate: new Date().toISOString(), history: [{ id: `h_ms_start_${Date.now()}`, date: new Date().toISOString(), user: currentUser.name, action: 'Criação de MS', details: `Processo MS criado a partir do caso #${c.internalId}.` }] };
           addCase(msCopy, currentUser.name);
-          
-          // Log on original case
           updateCase({ ...c }, 'MS Impetrado: Cópia gerada para o Judicial (Triagem).', currentUser.name, 'Ação Incidental');
-          
           addNotification('MS Iniciado', `Cópia do processo ${c.clientName} criada no Judicial para MS.`, 'SUCCESS');
           setDraggedCaseId(null);
           return;
       }
 
       if (targetColId.includes('arquivo') || targetColId.includes('indeferido')) {
-          setZoneConfirmation({
-              title: targetColId.includes('arquivo') ? 'Arquivar Processo?' : 'Registrar Indeferimento?',
-              description: 'Esta ação moverá o processo para uma área de baixa atividade. Deseja continuar?',
-              isDangerous: true,
-              targetColId
-          });
+          setZoneConfirmation({ title: targetColId.includes('arquivo') ? 'Arquivar Processo?' : 'Registrar Indeferimento?', description: 'Esta ação moverá o processo para uma área de baixa atividade. Deseja continuar?', isDangerous: true, targetColId });
           return;
       }
 
-      // Zone Routing
       if (targetColId === 'zone_judicial') { finalizeMove(c, 'jud_triagem', { view: 'JUDICIAL' }, 'Movido para fase Judicial', currentUser.name); return; }
       if (targetColId === 'zone_recurso') { finalizeMove(c, 'rec_triagem', { view: 'RECURSO_ADM' }, 'Movido para fase de Recurso', currentUser.name); return; }
       if (targetColId === 'zone_mesa_decisao') { finalizeMove(c, 'mesa_aguardando', { view: 'MESA_DECISAO' }, 'Enviado para Mesa de Decisão', currentUser.name); return; }
       if (targetColId === 'zone_admin') { finalizeMove(c, 'adm_triagem', { view: 'ADMIN' }, 'Retornado ao fluxo Administrativo', currentUser.name); return; }
       if (targetColId === 'zone_arquivo') { finalizeMove(c, 'arq_geral', { view: 'ARCHIVED' }, 'Processo Arquivado', currentUser.name); return; }
 
-      // Direct Move
       finalizeMove(c, targetColId, {}, `Movido de ${c.columnId} para ${targetColId}`, currentUser.name);
   };
 
@@ -445,103 +495,70 @@ export const useKanban = () => {
       if (!zoneConfirmation || !draggedCaseId || !currentUser) return;
       const c = cases.find(x => x.id === draggedCaseId);
       if (c) {
-          if (zoneConfirmation.targetColId === 'zone_arquivo') {
-              finalizeMove(c, 'arq_geral', { view: 'ARCHIVED' }, `Arquivamento confirmado`, currentUser.name);
-          } else {
-              finalizeMove(c, zoneConfirmation.targetColId, {}, `Movimentação confirmada para ${zoneConfirmation.targetColId}`, currentUser.name);
-          }
+          if (zoneConfirmation.targetColId === 'zone_arquivo') { finalizeMove(c, 'arq_geral', { view: 'ARCHIVED' }, `Arquivamento confirmado`, currentUser.name); } 
+          else { finalizeMove(c, zoneConfirmation.targetColId, {}, `Movimentação confirmada para ${zoneConfirmation.targetColId}`, currentUser.name); }
       }
-      setZoneConfirmation(null);
-      setDraggedCaseId(null);
+      setZoneConfirmation(null); setDraggedCaseId(null);
   };
 
   const finalizeMove = (caseItem: Case, targetColId: string, updates: Partial<Case> = {}, logDetail: string, userName: string) => {
       let finalUpdates = { ...updates, columnId: targetColId, lastUpdate: new Date().toISOString() };
-      
       const autoUpdates = getAutomaticUpdatesForColumn(targetColId);
       finalUpdates = { ...finalUpdates, ...autoUpdates };
 
       if (targetColId === 'adm_exigencia') {
-          // Keep deadlineStart if provided by modal, otherwise today
           if (!finalUpdates.deadlineStart) finalUpdates.deadlineStart = new Date().toISOString().slice(0, 10);
-          
-          if (updates['exigencyDetails']) {
-              finalUpdates.exigencyDetails = updates['exigencyDetails'];
-              logDetail += ` | Detalhe: "${updates['exigencyDetails']}"`;
-          }
+          if (updates['exigencyDetails']) { finalUpdates.exigencyDetails = updates['exigencyDetails']; logDetail += ` | Detalhe: "${updates['exigencyDetails']}"`; }
       }
 
       if (targetColId === 'adm_pagamento') {
           finalUpdates.urgency = 'HIGH';
-          if (!(caseItem.tags || []).includes('A RECEBER')) {
-              finalUpdates.tags = [...(caseItem.tags || []), 'A RECEBER'];
-          }
+          if (!(caseItem.tags || []).includes('A RECEBER')) { finalUpdates.tags = [...(caseItem.tags || []), 'A RECEBER']; }
           logDetail += " | Marcado para recebimento.";
       }
 
-      // --- WORKFLOW ACTION EXECUTION ---
       const { updates: workflowUpdates, log: workflowLog } = applyWorkflowActions(caseItem, targetColId, finalUpdates, logDetail);
-      
       updateCase({ ...caseItem, ...workflowUpdates }, workflowLog, userName, 'Movimentação');
       setDraggedCaseId(null);
   };
 
-  // --- VIEWS ---
   const columns = useMemo(() => COLUMNS_BY_VIEW[currentView], [currentView]);
-
+  const searchIndex = useMemo(() => buildSearchIndex(cases), [cases]);
   const filteredCases = useMemo(() => {
-      return cases.filter(c => {
+      let matches = searchTerm ? searchCasesByIndex(searchTerm, searchIndex, cases) : cases;
+      return matches.filter(c => {
           if (c.view !== currentView) return false;
-          if (searchTerm) {
-              const term = searchTerm.toLowerCase();
-              const matches = c.clientName.toLowerCase().includes(term) || c.cpf.includes(term) || c.internalId.includes(term) || (c.benefitNumber && c.benefitNumber.includes(term));
-              if (!matches) return false;
-          }
           if (responsibleFilter && c.responsibleId !== responsibleFilter) return false;
           if (urgencyFilter && c.urgency !== urgencyFilter) return false;
           if (tagFilter && (!c.tags || !c.tags.includes(tagFilter))) return false;
           return true;
       });
-  }, [cases, currentView, searchTerm, responsibleFilter, urgencyFilter, tagFilter]);
+  }, [cases, searchIndex, currentView, searchTerm, responsibleFilter, urgencyFilter, tagFilter]);
 
   const casesByColumn = useMemo(() => {
       const map: Record<string, Case[]> = {};
       columns.forEach(col => map[col.id] = []);
-      filteredCases.forEach(c => {
-          if (map[c.columnId]) map[c.columnId].push(c);
-      });
+      filteredCases.forEach(c => { if (map[c.columnId]) map[c.columnId].push(c); });
       return map;
   }, [filteredCases, columns]);
 
   const recurrencyMap = useMemo(() => {
       const map = new Map<string, number>();
-      cases.forEach(c => {
-          const key = c.cpf.replace(/\D/g, '');
-          map.set(key, (map.get(key) || 0) + 1);
-      });
+      cases.forEach(c => { const key = c.cpf.replace(/\D/g, ''); map.set(key, (map.get(key) || 0) + 1); });
       return map;
   }, [cases]);
 
   return {
       cases, setCases, filteredCases, casesByColumn, recurrencyMap,
-      currentView, setCurrentView, columns,
-      searchTerm, setSearchTerm, 
-      responsibleFilter, setResponsibleFilter,
-      urgencyFilter, setUrgencyFilter,
-      tagFilter, setTagFilter,
-      draggedCaseId, setDraggedCaseId,
-      pendingMove, setPendingMove, transitionType, setTransitionType,
-      generateInternalId, addCase, updateCase, handleDrop, finalizeMove,
-      zoneConfirmation, setZoneConfirmation, executeZoneMove,
+      currentView, setCurrentView, columns, searchTerm, setSearchTerm, 
+      responsibleFilter, setResponsibleFilter, urgencyFilter, setUrgencyFilter, tagFilter, setTagFilter,
+      draggedCaseId, setDraggedCaseId, pendingMove, setPendingMove, transitionType, setTransitionType,
+      generateInternalId, addCase, updateCase, handleDrop, finalizeMove, zoneConfirmation, setZoneConfirmation, executeZoneMove,
       notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead,
       documentTemplates, setDocumentTemplates: updateTemplates,
-      systemLogs, addSystemLog,
-      systemTags, setSystemTags: updateTags,
-      commonDocs, setCommonDocs: updateCommonDocs, 
-      agencies, setAgencies: updateAgencies,
-      whatsAppTemplates, setWhatsAppTemplates: updateWhatsAppTemplates,
-      workflowRules, setWorkflowRules: updateWorkflowRules,
-      appointments, addAppointment, cancelAppointment, // EXPORT NEW
-      isLoading, isSaving, error
+      systemLogs, addSystemLog, systemTags, setSystemTags: updateTags,
+      commonDocs, setCommonDocs: updateCommonDocs, agencies, setAgencies: updateAgencies,
+      whatsAppTemplates, setWhatsAppTemplates: updateWhatsAppTemplates, workflowRules, setWorkflowRules: updateWorkflowRules,
+      appointments, addAppointment, cancelAppointment, isLoading, isSaving, error
   };
 };
