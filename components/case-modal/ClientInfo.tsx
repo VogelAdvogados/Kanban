@@ -133,7 +133,7 @@ export const ClientInfo: React.FC<ClientInfoProps> = ({ data, onChange, onOpenWh
                 <div className="flex items-center gap-2">
                     <input 
                         type="text" 
-                        value={data.cpf} 
+                        value={data.cpf || ''} 
                         onChange={(e) => onChange({ cpf: formatCPF(e.target.value) })}
                         className="bg-transparent font-mono font-bold text-slate-800 text-lg w-full outline-none"
                         maxLength={14}
@@ -144,15 +144,30 @@ export const ClientInfo: React.FC<ClientInfoProps> = ({ data, onChange, onOpenWh
                 </div>
             </div>
             
-            {/* BIRTH DATE */}
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col relative group">
-                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><Cake size={10}/> Data de Nascimento</label>
-                <input 
-                    type="date" 
-                    value={data.birthDate || ''} 
-                    onChange={(e) => onChange({ birthDate: e.target.value })}
-                    className="bg-transparent font-bold text-slate-800 text-lg w-full outline-none"
-                />
+            {/* BIRTH DATE & SEX */}
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex gap-2 relative group">
+                <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><Cake size={10}/> Nascimento</label>
+                    <input 
+                        type="date" 
+                        value={data.birthDate || ''} 
+                        onChange={(e) => onChange({ birthDate: e.target.value })}
+                        className="bg-transparent font-bold text-slate-800 text-sm w-full outline-none"
+                    />
+                </div>
+                <div className="w-px bg-slate-300"></div>
+                <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1">Sexo</label>
+                    <select 
+                        value={data.sex || ''} 
+                        onChange={(e) => onChange({ sex: e.target.value as any })}
+                        className="bg-transparent font-bold text-slate-800 text-sm w-full outline-none"
+                    >
+                        <option value="">-</option>
+                        <option value="MALE">Masc.</option>
+                        <option value="FEMALE">Fem.</option>
+                    </select>
+                </div>
             </div>
 
             {/* TELEFONE */}
@@ -161,7 +176,7 @@ export const ClientInfo: React.FC<ClientInfoProps> = ({ data, onChange, onOpenWh
                 <div className="flex items-center gap-2">
                     <input 
                         type="text" 
-                        value={data.phone} 
+                        value={data.phone || ''} 
                         onChange={(e) => onChange({ phone: formatPhoneNumber(e.target.value) })}
                         className="bg-transparent font-bold text-slate-800 text-lg w-full outline-none"
                         maxLength={15}

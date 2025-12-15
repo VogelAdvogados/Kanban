@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  X, FileText, Printer, ChevronLeft, PenTool,
-  Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  List, ListOrdered, Undo, Redo, RefreshCcw, Eye, AlertTriangle, FileSignature, Scale, ArrowRight, Table, Image as ImageIcon, ChevronDown, Plus, Trash2, History
+  X, FileText, Printer, ChevronLeft, 
+  Scale, FileSignature, History, AlertTriangle
 } from 'lucide-react';
 import { Case, DocumentTemplate, OfficeData } from '../types';
-import { formatDate } from '../utils';
+import { fillTemplate } from '../utils/documentProcessing';
 
 interface DocumentGeneratorModalProps {
   data: Case;
@@ -16,7 +15,6 @@ interface DocumentGeneratorModalProps {
   onSaveToHistory?: (docTitle: string, content: string) => void;
 }
 
-// Map icons to categories
 const CategoryIcon = ({ category }: { category: string }) => {
     switch (category) {
         case 'PROCURACAO': return <Scale size={24} className="text-blue-500"/>;
@@ -29,212 +27,23 @@ const CategoryIcon = ({ category }: { category: string }) => {
 export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ data, templates, onClose, officeData, onSaveToHistory }) => {
   const [step, setStep] = useState<'SELECT' | 'PREVIEW'>('SELECT');
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null);
-  const [showPlaceholders, setShowPlaceholders] = useState(true);
-  const [showTableMenu, setShowTableMenu] = useState(false);
-  const [showImageMenu, setShowImageMenu] = useState(false);
-  const editorRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Helper: Get data safely or return null
-  const safeGet = (val: string | undefined | null) => val ? val.trim() : null;
-
-  // Helper: Create HTML tag for missing data or simple text
-  const wrapData = (val: string | null, label: string) => {
-      if (val) return val;
-      if (showPlaceholders) {
-          return `<span class="bg-yellow-100 text-yellow-800 px-1 font-bold border border-yellow-300 rounded mx-1" title="Dado ausente: ${label}" contenteditable="false">[FALTA: ${label}]</span>`;
-      }
-      return '_______________';
-  };
-
-  // Fill variables Logic - INTELLIGENT MODE
-  const fillTemplate = (content: string, c: Case) => {
-      const today = new Date();
-      
-      const day = String(today.getDate()).padStart(2, '0');
-      const monthNames = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-      const month = monthNames[today.getMonth()];
-      const year = String(today.getFullYear());
-      const longDate = `${day} de ${month} de ${year}`;
-
-      // Smart Address Construction
-      let addressSmart = "";
-      const street = safeGet(c.addressStreet);
-      const num = safeGet(c.addressNumber) || "S/N";
-      const neigh = safeGet(c.addressNeighborhood);
-      const city = safeGet(c.addressCity);
-      const state = safeGet(c.addressState);
-      const zip = safeGet(c.addressZip);
-
-      // Build logic: "Rua X, nº 123, Bairro Y, CEP 00000, Cidade/UF"
-      const parts = [];
-      if (street) parts.push(`${street}`);
-      if (street) parts.push(`nº ${num}`);
-      if (neigh) parts.push(`Bairro ${neigh}`);
-      if (zip) parts.push(`CEP ${zip}`);
-      if (city && state) parts.push(`${city}/${state}`);
-      else if (city) parts.push(city);
-      
-      addressSmart = parts.length > 0 ? parts.join(', ') : wrapData(null, 'ENDEREÇO');
-
-      // Common vars map
-      const replacements: Record<string, string> = {
-          '{NOME_CLIENTE}': wrapData(safeGet(c.clientName), 'NOME'),
-          '{CPF}': wrapData(safeGet(c.cpf), 'CPF'),
-          '{RG}': wrapData(safeGet(c.rg), 'RG'),
-          '{PIS}': wrapData(safeGet(c.pis), 'PIS'),
-          '{TELEFONE}': wrapData(safeGet(c.phone), 'TELEFONE'),
-          '{ESTADO_CIVIL}': wrapData(safeGet(c.maritalStatus), 'EST. CIVIL'),
-          '{DATA_NASCIMENTO}': c.birthDate ? formatDate(c.birthDate) : wrapData(null, 'NASCIMENTO'),
-          '{NOME_MAE}': wrapData(safeGet(c.motherName), 'MÃE'),
-          '{NB}': wrapData(safeGet(c.benefitNumber), 'NB'),
-          '{NPU}': wrapData(safeGet(c.mandadosSeguranca?.[0]?.npu), 'NPU'), // Pega o primeiro NPU se houver
-          '{ADVOGADO_RESPONSAVEL}': wrapData(safeGet(c.responsibleName), 'ADVOGADO'),
-          
-          // Datas
-          '{DATA_ATUAL}': longDate,
-          '{DIA}': day,
-          '{MES}': month,
-          '{ANO}': year,
-
-          // Endereço Granular
-          '{ENDERECO_COMPLETO}': addressSmart,
-          '{RUA}': wrapData(street, 'RUA'),
-          '{NUMERO}': wrapData(num, 'NÚMERO'),
-          '{BAIRRO}': wrapData(neigh, 'BAIRRO'),
-          '{CIDADE}': wrapData(city, 'CIDADE'),
-          '{UF}': wrapData(state, 'UF'),
-          '{CEP}': wrapData(zip, 'CEP'),
-      };
-
-      let processed = content;
-      Object.entries(replacements).forEach(([key, value]) => {
-          // Global replace with regex to catch all instances
-          processed = processed.split(key).join(value);
-      });
-
-      return processed;
-  };
-
-  const loadContent = () => {
-    if (selectedTemplate && editorRef.current) {
-        editorRef.current.innerHTML = fillTemplate(selectedTemplate.content, data);
-    }
-  };
-
+  const [processedContent, setProcessedContent] = useState('');
+  
+  // Logic to process content when template is selected
   useEffect(() => {
-      if (step === 'PREVIEW') {
-          // Pequeno delay para garantir que o ref existe
-          setTimeout(loadContent, 50);
-      }
-  }, [step, selectedTemplate, showPlaceholders]);
-
-  // --- EDITOR COMMANDS ---
-  const execCmd = (command: string, value: string | undefined = undefined) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
-  };
-
-  // --- TABLE MANIPULATION ---
-  const insertTable = () => {
-    const tableHTML = `
-      <table style="border-collapse: collapse; width: 100%; border: 1px solid black; margin-bottom: 1em;" border="1">
-        <tbody>
-          <tr>
-            <td style="padding: 5px; border: 1px solid #ccc;">&nbsp;</td>
-            <td style="padding: 5px; border: 1px solid #ccc;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td style="padding: 5px; border: 1px solid #ccc;">&nbsp;</td>
-            <td style="padding: 5px; border: 1px solid #ccc;">&nbsp;</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-    `;
-    execCmd('insertHTML', tableHTML);
-    setShowTableMenu(false);
-  };
-
-  const modifyTable = (action: 'addRow' | 'addCol' | 'delRow' | 'delCol') => {
-      const selection = window.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      const range = selection.getRangeAt(0);
-      let node = range.startContainer as HTMLElement | null;
-      while (node && node.nodeName !== 'TD' && node.nodeName !== 'TH') {
-          if (node.nodeName === 'DIV' && node.id === 'editor') return;
-          node = node.parentElement;
-      }
-      if (!node) { alert("Clique dentro de uma tabela para editar."); return; }
-      
-      const td = node as HTMLTableCellElement;
-      const tr = td.parentElement as HTMLTableRowElement;
-      const table = tr.parentElement?.parentElement as HTMLTableElement;
-      
-      const cellIndex = td.cellIndex;
-      const rowIndex = tr.rowIndex;
-
-      if (action === 'addRow') {
-          const newRow = table.insertRow(rowIndex + 1);
-          for (let i = 0; i < tr.cells.length; i++) {
-              const newCell = newRow.insertCell(i);
-              newCell.style.border = '1px solid #ccc';
-              newCell.style.padding = '5px';
-              newCell.innerHTML = '&nbsp;';
+      if (step === 'PREVIEW' && selectedTemplate) {
+          let content = selectedTemplate.content;
+          
+          // Prepend Logo if available
+          if (officeData?.logo) {
+              content = `<div style="text-align:center; margin-bottom: 20px;"><img src="${officeData.logo}" style="max-width: 150px; height: auto;" /></div>` + content;
           }
-      } else if (action === 'addCol') {
-          for (let i = 0; i < table.rows.length; i++) {
-              const newCell = table.rows[i].insertCell(cellIndex + 1);
-              newCell.style.border = '1px solid #ccc';
-              newCell.style.padding = '5px';
-              newCell.innerHTML = '&nbsp;';
-          }
-      } else if (action === 'delRow') {
-          table.deleteRow(rowIndex);
-      } else if (action === 'delCol') {
-          for (let i = 0; i < table.rows.length; i++) {
-              if (table.rows[i].cells.length > cellIndex) {
-                  table.rows[i].deleteCell(cellIndex);
-              }
-          }
-      }
-      setShowTableMenu(false);
-  };
 
-  // --- IMAGE & LOGO MANIPULATION ---
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-              execCmd('insertImage', ev.target?.result as string);
-          };
-          reader.readAsDataURL(file);
+          setProcessedContent(fillTemplate(content, data));
       }
-      // RESET INPUT so same file can be selected again
-      if (e.target) e.target.value = '';
-      setShowImageMenu(false);
-  };
-
-  const insertLogo = () => {
-      if (officeData?.logo) {
-          // Wrap in a div to allow resizing/centering behavior more easily
-          const html = `<img src="${officeData.logo}" style="max-width: 200px; height: auto;" />`;
-          execCmd('insertHTML', html);
-      } else {
-          alert('Nenhuma logo configurada nas opções do escritório.');
-      }
-  };
-
-  const insertImageUrl = () => {
-      const url = prompt("Cole a URL da imagem:");
-      if (url) execCmd('insertImage', url);
-      setShowImageMenu(false);
-  };
+  }, [step, selectedTemplate, data, officeData]);
 
   const handlePrint = () => {
-      const content = editorRef.current?.innerHTML || '';
-      
       const printWindow = window.open('', '_blank');
       if (printWindow) {
           printWindow.document.write(`
@@ -242,243 +51,193 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({ 
                 <head>
                     <title>${data.clientName} - ${selectedTemplate?.title}</title>
                     <style>
-                        body { font-family: 'Times New Roman', serif; padding: 40px; line-height: 1.6; color: #000; }
-                        p { margin-bottom: 15px; }
-                        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #000; }
+                        @page { margin: 2cm; size: A4; }
+                        body { 
+                            font-family: 'Times New Roman', serif; 
+                            padding: 40px; 
+                            line-height: 1.5; 
+                            color: #000; 
+                            font-size: 12pt;
+                        }
+                        p { margin-bottom: 12px; text-align: justify; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
                         td, th { border: 1px solid #000; padding: 5px; }
                         img { max-width: 100%; }
-                        @media print {
-                          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                          .bg-yellow-100 { background-color: transparent !important; border: none !important; color: black !important; padding: 0 !important; }
+                        
+                        /* Lógica para Campos Faltantes na IMPRESSÃO */
+                        .var-missing::before {
+                            content: '________________________________';
+                            display: inline-block;
+                            white-space: nowrap;
+                            color: #000;
                         }
                     </style>
                 </head>
-                <body>
-                    ${content}
-                </body>
+                <body>${processedContent}</body>
             </html>
           `);
           printWindow.document.close();
           setTimeout(() => {
+              printWindow.focus();
               printWindow.print();
           }, 500);
       }
   };
 
-  const handleSaveToHistory = () => {
-      if(onSaveToHistory && selectedTemplate && editorRef.current) {
-          // Strip placeholders background for saving
-          const content = editorRef.current.innerHTML.replace(/bg-yellow-100.*?"/g, '"').replace(/\[FALTA:.*?\]/g, '');
-          onSaveToHistory(selectedTemplate.title, `Conteúdo gerado: ${content.substring(0, 100)}...`);
-          alert('Documento salvo no histórico do caso com sucesso!');
+  const handleSaveHistory = () => {
+      if(onSaveToHistory && selectedTemplate) {
+          // Remove HTML tags for simple logging
+          const plainText = processedContent.replace(/<[^>]+>/g, ' '); 
+          onSaveToHistory(selectedTemplate.title, `Documento gerado e impresso: ${selectedTemplate.title}`);
+          alert('Registro salvo no histórico do caso.');
       }
   };
 
-  // Helper for menu buttons to prevent focus loss
-  const preventFocusLoss = (fn: () => void) => (e: React.MouseEvent) => {
-      e.preventDefault();
-      fn();
-  };
+  // Styles for the On-Screen Preview
+  const previewStyles = `
+    .document-preview {
+        font-family: 'Times New Roman', serif;
+        line-height: 1.5;
+        color: #000;
+        font-size: 12pt;
+    }
+    .document-preview p { margin-bottom: 12px; }
+    
+    /* Lógica para Campos Faltantes na TELA */
+    .document-preview .var-missing::before {
+        content: '[FALTA: ' attr(data-label) ']';
+        background-color: #fef08a; /* Yellow-200 */
+        color: #854d0e; /* Yellow-900 */
+        border: 1px dashed #ca8a04;
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 0.9em;
+        font-family: sans-serif;
+    }
+  `;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      {/* MODIFIED: Width and Height increased for accessibility */}
-      <div className="bg-slate-100 rounded-xl shadow-2xl w-full max-w-[90vw] md:max-w-[1400px] h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        
-        {/* HEADER */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                {step === 'PREVIEW' && (
-                    <button onClick={() => setStep('SELECT')} className="p-1 hover:bg-slate-100 rounded-full text-slate-500">
-                        <ChevronLeft size={24}/>
-                    </button>
-                )}
-                <div>
-                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                        {step === 'SELECT' ? 'Gerador de Documentos' : selectedTemplate?.title}
-                    </h2>
-                    <p className="text-xs text-slate-500">
-                        Cliente: <strong>{data.clientName}</strong>
-                    </p>
-                </div>
-            </div>
-            <button onClick={onClose} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-full text-slate-400">
-                <X size={24}/>
-            </button>
-        </div>
-
-        {/* STEP 1: SELECT DOCUMENT */}
-        {step === 'SELECT' && (
-            <div className="flex-1 overflow-y-auto p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {templates.map(tpl => (
-                        <button 
-                            key={tpl.id}
-                            onClick={() => { setSelectedTemplate(tpl); setStep('PREVIEW'); }}
-                            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 transition-all text-left group"
-                        >
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="p-3 bg-slate-50 rounded-lg group-hover:bg-blue-50 transition-colors">
-                                    <CategoryIcon category={tpl.category} />
-                                </div>
-                                <ArrowRight size={20} className="text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
-                            </div>
-                            <h3 className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{tpl.title}</h3>
-                            <p className="text-xs text-slate-500 mt-1 uppercase font-semibold">{tpl.category}</p>
-                        </button>
-                    ))}
-                </div>
-                {templates.length === 0 && (
-                    <div className="text-center py-20 text-slate-400">
-                        <FileText size={48} className="mx-auto mb-4 opacity-20"/>
-                        <p>Nenhum modelo cadastrado.</p>
-                        <p className="text-sm">Vá em Configurações > Documentos para criar.</p>
-                    </div>
-                )}
-            </div>
-        )}
-
-        {/* STEP 2: PREVIEW & PRINT */}
-        {step === 'PREVIEW' && (
-            <div className="flex-1 flex flex-col bg-slate-200">
-                {/* TOOLBAR */}
-                <div className="bg-white border-b border-slate-200 p-2 flex flex-wrap gap-2 items-center justify-between shadow-sm z-10">
-                    
-                    {/* Left: Quick Actions */}
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={() => setShowPlaceholders(!showPlaceholders)}
-                            className={`p-2 rounded-lg text-xs font-bold flex items-center gap-2 border transition-colors ${showPlaceholders ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}
-                            title="Alternar alertas de dados faltantes"
-                        >
-                            {showPlaceholders ? <AlertTriangle size={14}/> : <Eye size={14}/>} 
-                            {showPlaceholders ? 'Alertas Visíveis' : 'Alertas Ocultos'}
-                        </button>
-                        <button onClick={loadContent} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 flex items-center gap-2 text-xs font-bold border border-transparent hover:border-slate-200" title="Recarregar dados originais">
-                            <RefreshCcw size={14}/> Resetar
-                        </button>
-                    </div>
-
-                    {/* Center: Formatting (Collapsed for cleaner UI) */}
-                    <div className="hidden lg:flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                        <button onMouseDown={preventFocusLoss(() => execCmd('undo'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><Undo size={14}/></button>
-                        <button onMouseDown={preventFocusLoss(() => execCmd('redo'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><Redo size={14}/></button>
-                        
-                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-
-                        {/* FONT FAMILY SELECTOR - Expanded */}
-                        <select onChange={(e) => execCmd('fontName', e.target.value)} className="text-[10px] p-1 rounded border border-slate-300 bg-white w-28 outline-none cursor-pointer">
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Courier New">Courier New</option>
-                            <option value="Tahoma">Tahoma</option>
-                            <option value="Verdana">Verdana</option>
-                            <option value="Georgia">Georgia</option>
-                            <option value="Trebuchet MS">Trebuchet MS</option>
-                        </select>
-                        <select onChange={(e) => execCmd('fontSize', e.target.value)} className="text-[10px] p-1 rounded border border-slate-300 bg-white w-16 outline-none cursor-pointer">
-                            <option value="1">Pequeno</option>
-                            <option value="3" selected>Normal</option>
-                            <option value="5">Grande</option>
-                            <option value="7">Enorme</option>
-                        </select>
-
-                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-
-                        <button onMouseDown={preventFocusLoss(() => execCmd('bold'))} className="p-1 hover:bg-slate-200 rounded text-slate-700 font-bold"><Bold size={14}/></button>
-                        <button onMouseDown={preventFocusLoss(() => execCmd('italic'))} className="p-1 hover:bg-slate-200 rounded text-slate-700 italic"><Italic size={14}/></button>
-                        <button onMouseDown={preventFocusLoss(() => execCmd('underline'))} className="p-1 hover:bg-slate-200 rounded text-slate-700 underline"><Underline size={14}/></button>
-                        
-                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-
-                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyLeft'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignLeft size={14}/></button>
-                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyCenter'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignCenter size={14}/></button>
-                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyRight'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignRight size={14}/></button>
-                        <button onMouseDown={preventFocusLoss(() => execCmd('justifyFull'))} className="p-1 hover:bg-slate-200 rounded text-slate-600"><AlignJustify size={14}/></button>
-
-                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                        
-                        {/* TABLE MENU */}
-                        <div className="relative">
-                            <button onMouseDown={preventFocusLoss(() => setShowTableMenu(!showTableMenu))} className="p-1 hover:bg-slate-200 rounded text-slate-600 flex items-center gap-1" title="Tabela">
-                                <Table size={14}/> <ChevronDown size={10}/>
-                            </button>
-                            {showTableMenu && (
-                                <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-lg p-1 z-50 w-40 flex flex-col gap-1">
-                                    <button onMouseDown={preventFocusLoss(insertTable)} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">Inserir Tabela</button>
-                                    <div className="h-px bg-slate-100 my-0.5"></div>
-                                    <button onMouseDown={preventFocusLoss(() => modifyTable('addRow'))} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">+ Linha</button>
-                                    <button onMouseDown={preventFocusLoss(() => modifyTable('addCol'))} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">+ Coluna</button>
-                                    <div className="h-px bg-slate-100 my-0.5"></div>
-                                    <button onMouseDown={preventFocusLoss(() => modifyTable('delRow'))} className="text-xs text-left px-2 py-1.5 hover:bg-red-50 text-red-600 rounded">Remover Linha</button>
-                                    <button onMouseDown={preventFocusLoss(() => modifyTable('delCol'))} className="text-xs text-left px-2 py-1.5 hover:bg-red-50 text-red-600 rounded">Remover Coluna</button>
-                                </div>
-                            )}
-                        </div>
-
-                         {/* IMAGE MENU */}
-                         <div className="relative">
-                            <button onMouseDown={preventFocusLoss(() => setShowImageMenu(!showImageMenu))} className="p-1 hover:bg-slate-200 rounded text-slate-600 flex items-center gap-1" title="Imagem">
-                                <ImageIcon size={14}/> <ChevronDown size={10}/>
-                            </button>
-                            {showImageMenu && (
-                                <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-lg p-1 z-50 w-40 flex flex-col gap-1">
-                                    <label className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded cursor-pointer">
-                                        Upload Imagem...
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} ref={fileInputRef} />
-                                    </label>
-                                    <button onMouseDown={preventFocusLoss(insertImageUrl)} className="text-xs text-left px-2 py-1.5 hover:bg-slate-100 rounded">Imagem via URL</button>
-                                    {officeData?.logo && (
-                                        <>
-                                            <div className="h-px bg-slate-100 my-0.5"></div>
-                                            <button onMouseDown={preventFocusLoss(insertLogo)} className="text-xs text-left px-2 py-1.5 hover:bg-blue-50 text-blue-600 rounded font-bold">Inserir Logo</button>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Right: Actions */}
-                    <div className="flex items-center gap-2">
-                        {onSaveToHistory && (
-                            <button 
-                                onClick={handleSaveToHistory}
-                                className="px-3 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs font-bold transition-all"
-                                title="Salvar um registro deste documento no histórico do processo"
-                            >
-                                <History size={14}/> Salvar no Histórico
-                            </button>
-                        )}
-                        <button 
-                            onClick={handlePrint} 
-                            className="px-6 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 text-sm font-bold hover:bg-blue-700 shadow-md transition-transform active:scale-95"
-                        >
-                            <Printer size={16}/> IMPRIMIR
-                        </button>
-                    </div>
-                </div>
-
-                {/* PAPER PREVIEW */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 flex justify-center bg-slate-200/50">
-                    <div className="w-full max-w-[210mm] min-h-[297mm] bg-white shadow-xl p-[20mm] md:p-[25mm] rounded-sm transition-all duration-300">
-                        <div 
-                            id="editor"
-                            ref={editorRef}
-                            contentEditable
-                            className="w-full h-full outline-none text-slate-900 font-serif leading-relaxed text-justify whitespace-pre-wrap"
-                            style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt' }}
-                        />
-                    </div>
-                </div>
-            </div>
-        )}
-
+    <div className="fixed inset-0 z-[100] flex flex-col bg-slate-900/95 backdrop-blur-sm animate-in fade-in duration-300">
+      <style>{previewStyles}</style>
+      
+      {/* 1. TOP HEADER */}
+      <div className="flex-shrink-0 h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shadow-md z-50">
+          <div className="flex items-center gap-4">
+              {step === 'PREVIEW' && (
+                  <button onClick={() => setStep('SELECT')} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                      <ChevronLeft size={24}/>
+                  </button>
+              )}
+              <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <FileText className="text-blue-500" /> 
+                      {step === 'SELECT' ? 'Gerar Documento' : selectedTemplate?.title}
+                  </h2>
+                  {step === 'PREVIEW' && (
+                      <p className="text-xs text-slate-400">Cliente: <span className="text-white font-bold">{data.clientName}</span></p>
+                  )}
+              </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-red-500/20 rounded-full text-slate-400 hover:text-red-500 transition-colors">
+              <X size={24}/>
+          </button>
       </div>
-      {/* Click overlay to close dropdowns */}
-      {(showTableMenu || showImageMenu) && (
-          <div className="fixed inset-0 z-40 bg-transparent" onClick={() => { setShowTableMenu(false); setShowImageMenu(false); }}></div>
-      )}
+
+      {/* 2. MAIN CONTENT AREA */}
+      <div className="flex-1 overflow-hidden relative flex bg-slate-100">
+          
+          {/* VIEW: TEMPLATE SELECTION */}
+          {step === 'SELECT' && (
+              <div className="flex-1 overflow-y-auto p-8 flex justify-center">
+                  <div className="w-full max-w-5xl">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {templates.map(tpl => (
+                              <button 
+                                  key={tpl.id}
+                                  onClick={() => { setSelectedTemplate(tpl); setStep('PREVIEW'); }}
+                                  className="bg-white border border-slate-200 hover:border-blue-500 hover:shadow-lg p-6 rounded-xl text-left transition-all group relative overflow-hidden h-40 flex flex-col justify-between"
+                              >
+                                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                      <FileText size={80} className="text-slate-900"/>
+                                  </div>
+                                  <div className="relative z-10">
+                                      <div className="mb-3 p-2 bg-slate-50 w-fit rounded-lg shadow-sm group-hover:bg-blue-50 text-slate-500 group-hover:text-blue-600 transition-colors">
+                                          <CategoryIcon category={tpl.category} />
+                                      </div>
+                                      <h3 className="text-base font-bold text-slate-800 mb-1 line-clamp-2 leading-tight group-hover:text-blue-700">{tpl.title}</h3>
+                                  </div>
+                                  <div className="relative z-10 pt-2 border-t border-slate-50 mt-2">
+                                      <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">{tpl.category}</p>
+                                  </div>
+                              </button>
+                          ))}
+                      </div>
+                      {templates.length === 0 && (
+                          <div className="text-center text-slate-500 py-20">
+                              <p className="text-lg font-bold">Nenhum modelo disponível.</p>
+                              <p className="text-sm">Configure modelos no menu Ajustes.</p>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          )}
+
+          {/* VIEW: PREVIEW */}
+          {step === 'PREVIEW' && (
+              <>
+                  {/* PREVIEW CONTAINER */}
+                  <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-slate-200/50">
+                      <div className="bg-white shadow-2xl w-[210mm] min-h-[297mm] p-[20mm] document-preview">
+                          <div dangerouslySetInnerHTML={{ __html: processedContent }} />
+                      </div>
+                  </div>
+
+                  {/* RIGHT: ACTIONS */}
+                  <div className="w-80 bg-white border-l border-slate-200 flex flex-col z-40 shadow-xl">
+                      
+                      <div className="p-6 border-b border-slate-100">
+                          <h3 className="font-bold text-slate-800 text-lg mb-1">Ações</h3>
+                          <p className="text-xs text-slate-500">Revise o documento antes de imprimir.</p>
+                      </div>
+
+                      <div className="p-6 space-y-4 flex-1">
+                          
+                          <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg">
+                              <h4 className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                  <AlertTriangle size={14}/> Instruções
+                              </h4>
+                              <p className="text-xs text-slate-600 leading-relaxed">
+                                  Os campos destacados em <span className="bg-yellow-200 text-yellow-900 px-1 rounded font-bold text-[10px]">AMARELO</span> indicam dados que não foram encontrados no cadastro do cliente.
+                                  <br/><br/>
+                                  Na impressão, eles serão substituídos por uma linha (_________) para preenchimento manual.
+                              </p>
+                          </div>
+
+                          <button 
+                              onClick={handlePrint}
+                              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
+                          >
+                              <Printer size={20}/> IMPRIMIR DOCUMENTO
+                          </button>
+                          
+                          {onSaveToHistory && (
+                              <button 
+                                  onClick={handleSaveHistory}
+                                  className="w-full py-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                              >
+                                  <History size={16}/> Registrar no Histórico
+                              </button>
+                          )}
+                      </div>
+                      
+                      <div className="p-4 bg-slate-50 text-center text-[10px] text-slate-400 border-t border-slate-100">
+                          Para editar este modelo, acesse Ajustes > Modelos.
+                      </div>
+                  </div>
+              </>
+          )}
+      </div>
     </div>
   );
 };

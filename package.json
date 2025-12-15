@@ -1,14 +1,17 @@
+
 {
   "name": "rambo-prev-system",
   "private": true,
-  "version": "2.1.0",
+  "version": "4.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
+    "type-check": "tsc",
     "preview": "vite preview"
   },
   "dependencies": {
+    "firebase": "^10.8.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

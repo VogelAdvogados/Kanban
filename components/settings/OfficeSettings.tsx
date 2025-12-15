@@ -1,16 +1,15 @@
 
 import React, { useRef } from 'react';
-import { Save, Building, ImageIcon } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 import { OfficeData } from '../../types';
 
 interface OfficeSettingsProps {
   officeData: OfficeData;
   setOfficeData: (data: OfficeData) => void;
-  onSave: () => void;
   showToast: (msg: string, type: 'success' | 'error') => void;
 }
 
-export const OfficeSettings: React.FC<OfficeSettingsProps> = ({ officeData, setOfficeData, onSave, showToast }) => {
+export const OfficeSettings: React.FC<OfficeSettingsProps> = ({ officeData, setOfficeData, showToast }) => {
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,12 +37,6 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({ officeData, setO
 
   return (
     <div className="space-y-6">
-        <div className="pb-4 border-b border-slate-100">
-             <h3 className="font-bold text-slate-800 text-lg">Informações do Escritório</h3>
-             <p className="text-xs text-slate-500">
-                 Estes dados aparecerão no cabeçalho e serão usados para preenchimento automático de documentos.
-             </p>
-        </div>
         
         {/* Logo Upload Section */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start gap-6">
@@ -145,15 +138,6 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({ officeData, setO
                     />
                 </div>
             </div>
-        </div>
-
-        <div className="pt-4 border-t border-slate-100 flex justify-end">
-            <button 
-                onClick={onSave}
-                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md flex items-center gap-2"
-            >
-                <Save size={16}/> Salvar Alterações
-            </button>
         </div>
     </div>
   );

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2, User, Lock, Users, ChevronLeft, ChevronRight, Plus, Check, Save, Palette, Globe } from 'lucide-react';
 import { StickyNote, User as UserType, StickyNoteColor } from '../types';
+import { safeStringify } from '../utils';
 
 interface StickyNoteDialogProps {
   notes: StickyNote[];
@@ -88,7 +89,9 @@ export const StickyNoteDialog: React.FC<StickyNoteDialogProps> = ({ notes, users
   const handleSaveAndClose = () => {
       // Remove empty notes before saving
       const cleanNotes = localNotes.filter(n => n.text.trim() !== '');
-      const hasChanges = JSON.stringify(cleanNotes) !== JSON.stringify(notes);
+      
+      // Use safeStringify here
+      const hasChanges = safeStringify(cleanNotes) !== safeStringify(notes);
       
       if (hasChanges) {
           onSaveNotes(cleanNotes, cleanNotes.length > notes.length ? "Nota adicionada" : "Notas atualizadas");

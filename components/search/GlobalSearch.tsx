@@ -1,8 +1,9 @@
 
+// ... imports
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, X, Clock, User, Briefcase, CheckSquare, ArrowRight } from 'lucide-react';
+import { Search, X, Clock, User, Briefcase, CheckSquare, ArrowRight, StickyNote, FileText, Paperclip, Tag, History, CornerDownRight } from 'lucide-react';
 import { Case, ViewType, Task } from '../../types';
-import { VIEW_CONFIG } from '../../constants';
+import { VIEW_CONFIG, VIEW_THEMES } from '../../constants';
 
 interface GlobalSearchProps {
   isOpen: boolean;
@@ -13,20 +14,49 @@ interface GlobalSearchProps {
   onAction: (action: string) => void;
 }
 
-type SearchResultType = 'CLIENT' | 'CASE' | 'TASK' | 'RECENT';
+type SearchResultType = 'CLIENT' | 'CASE' | 'TASK' | 'NOTE' | 'FILE' | 'HISTORY' | 'RECENT';
 
 interface SearchResult {
   id: string;
   type: SearchResultType;
   title: string;
-  subtitle: string;
+  subtitle: React.ReactNode; // Changed to Node to support highlighting
   icon: any;
   data?: any;
   action: () => void;
+  score?: number; // Internal ranking
 }
+
+// Regex escape function to prevent crashes
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper for highlighting text
+const HighlightMatch = ({ text, match }: { text: string, match: string }) => {
+    if (!match.trim() || !text) return <>{text || ''}</>;
+    
+    try {
+        const escapedMatch = escapeRegExp(match);
+        const parts = text.split(new RegExp(`(${escapedMatch})`, 'gi'));
+        return (
+            <>
+                {parts.map((part, i) => 
+                    part.toLowerCase() === match.toLowerCase() 
+                    ? <span key={i} className="bg-yellow-200 text-slate-900 font-semibold px-0.5 rounded-[1px]">{part}</span> 
+                    : part
+                )}
+            </>
+        );
+    } catch (e) {
+        return <>{text}</>; // Fallback if regex fails
+    }
+};
 
 export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cases, onSelectCase }) => {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  // ... rest of component logic (same as original, just updating HighlightMatch usage above)
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [recentIds, setRecentIds] = useState<string[]>(() => {
       try {
@@ -41,9 +71,18 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
       if (isOpen) {
           setTimeout(() => inputRef.current?.focus(), 50);
           setQuery('');
+          setDebouncedQuery('');
           setSelectedIndex(0);
       }
   }, [isOpen]);
+
+  // Debounce logic
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          setDebouncedQuery(query);
+      }, 300); // 300ms delay to improve performance
+      return () => clearTimeout(timer);
+  }, [query]);
 
   const addToRecent = (id: string) => {
       const newRecents = [id, ...recentIds.filter(r => r !== id)].slice(0, 5);
@@ -55,9 +94,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
       let items: SearchResult[] = [];
 
       // 0. Recents (if query is empty)
-      if (!query.trim()) {
+      if (!debouncedQuery.trim()) {
           recentIds.forEach(id => {
-              // Try to find in cases
               const c = cases.find(x => x.id === id);
               if (c) {
                   items.push({
@@ -74,46 +112,43 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
           return items;
       }
 
-      const lowerQuery = query.toLowerCase();
+      const lowerQuery = debouncedQuery.toLowerCase();
 
-      // 1. Exact ID Match (Priority 1)
-      const exactIdMatch = cases.find(c => c.internalId === query || c.internalId === query.toUpperCase());
+      // 1. Exact ID Match (Highest Priority)
+      const exactIdMatch = cases.find(c => c.internalId === debouncedQuery || c.internalId === debouncedQuery.toUpperCase());
       if (exactIdMatch) {
           items.push({
               id: `exact_${exactIdMatch.id}`,
               type: 'CASE',
               title: `Processo #${exactIdMatch.internalId}`,
-              subtitle: `Correspondência Exata • ${exactIdMatch.clientName}`,
+              subtitle: <span className="text-emerald-600 font-bold">Correspondência Exata • {exactIdMatch.clientName}</span>,
               icon: Briefcase,
               data: exactIdMatch,
-              action: () => { onSelectCase(exactIdMatch); addToRecent(exactIdMatch.id); onClose(); }
+              action: () => { onSelectCase(exactIdMatch); addToRecent(exactIdMatch.id); onClose(); },
+              score: 100
           });
       }
 
-      // 2. Clients (Grouped by Case)
-      const uniqueClients = new Set();
-      cases.forEach(c => {
-          if (c.clientName.toLowerCase().includes(lowerQuery) || c.cpf.includes(lowerQuery)) {
-              if (!uniqueClients.has(c.cpf) && c.id !== exactIdMatch?.id) {
-                  uniqueClients.add(c.cpf);
-                  items.push({
-                      id: `client_${c.id}`,
-                      type: 'CLIENT',
-                      title: c.clientName,
-                      subtitle: `CPF: ${c.cpf} • Último caso: ${VIEW_CONFIG[c.view]?.label}`,
-                      icon: User,
-                      data: c,
-                      action: () => { onSelectCase(c); addToRecent(c.id); onClose(); }
-                  });
-              }
-          }
-      });
-
-      // 3. Cases (By Protocol, NB or Partial ID)
+      // Iterate Cases once for performance
       cases.forEach(c => {
           if (c.id === exactIdMatch?.id) return; // Skip if already added
+
+          // 2. Clients & Primary Info
+          if (c.clientName.toLowerCase().includes(lowerQuery) || c.cpf.includes(lowerQuery)) {
+              items.push({
+                  id: `client_${c.id}`,
+                  type: 'CLIENT',
+                  title: c.clientName,
+                  subtitle: <>CPF: <HighlightMatch text={c.cpf} match={debouncedQuery} /> • {VIEW_CONFIG[c.view]?.label}</>,
+                  icon: User,
+                  data: c,
+                  action: () => { onSelectCase(c); addToRecent(c.id); onClose(); },
+                  score: 90
+              });
+          }
           
-          if (
+          // 3. Process Data (NB, Protocol)
+          else if (
               c.internalId.toLowerCase().includes(lowerQuery) || 
               (c.benefitNumber && c.benefitNumber.includes(lowerQuery)) ||
               (c.protocolNumber && c.protocolNumber.includes(lowerQuery))
@@ -122,33 +157,99 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
                   id: `case_${c.id}`,
                   type: 'CASE',
                   title: `Processo #${c.internalId}`,
-                  subtitle: `${c.clientName} • ${VIEW_CONFIG[c.view]?.label} • ${c.columnId.replace(/_/g, ' ')}`,
+                  subtitle: <>{c.clientName} • NB/Protocolo: <HighlightMatch text={c.benefitNumber || c.protocolNumber || ''} match={debouncedQuery}/></>,
                   icon: Briefcase,
                   data: c,
-                  action: () => { onSelectCase(c); addToRecent(c.id); onClose(); }
+                  action: () => { onSelectCase(c); addToRecent(c.id); onClose(); },
+                  score: 80
               });
           }
-      });
 
-      // 4. Tasks
-      cases.forEach(c => {
+          // 4. Tags
+          if (c.tags && c.tags.some(t => t.toLowerCase().includes(lowerQuery))) {
+              const matchedTag = c.tags.find(t => t.toLowerCase().includes(lowerQuery));
+              items.push({
+                  id: `tag_${c.id}`,
+                  type: 'CASE',
+                  title: c.clientName,
+                  subtitle: <span className="flex items-center gap-1">Tag: <span className="bg-slate-100 px-1 rounded font-bold"><HighlightMatch text={matchedTag || ''} match={debouncedQuery}/></span></span>,
+                  icon: Tag,
+                  data: c,
+                  action: () => { onSelectCase(c); onClose(); },
+                  score: 70
+              });
+          }
+
+          // 5. Tasks
           c.tasks?.forEach(t => {
               if (t.text.toLowerCase().includes(lowerQuery) && !t.completed) {
                   items.push({
                       id: `task_${t.id}`,
                       type: 'TASK',
-                      title: t.text,
-                      subtitle: `Tarefa em: ${c.clientName}`,
+                      title: t.text, // Simplified, using highlight in render
+                      subtitle: <>Tarefa pendente em: <strong>{c.clientName}</strong></>,
                       icon: CheckSquare,
                       data: c,
-                      action: () => { onSelectCase(c); onClose(); } // Open case to see task
+                      action: () => { onSelectCase(c); onClose(); },
+                      score: 60
+                  });
+              }
+          });
+
+          // 6. Sticky Notes (Deep Search)
+          c.stickyNotes?.forEach(n => {
+              if (n.text.toLowerCase().includes(lowerQuery)) {
+                  items.push({
+                      id: `note_${n.id}`,
+                      type: 'NOTE',
+                      title: `Nota: "${n.text.substring(0, 30)}..."`,
+                      subtitle: <>Em: <strong>{c.clientName}</strong> • Por: {n.authorName}</>,
+                      icon: StickyNote,
+                      data: c,
+                      action: () => { onSelectCase(c); onClose(); },
+                      score: 50
+                  });
+              }
+          });
+
+          // 7. Files (Deep Search)
+          c.files?.forEach(f => {
+              if (f.name.toLowerCase().includes(lowerQuery)) {
+                  items.push({
+                      id: `file_${f.id}`,
+                      type: 'FILE',
+                      title: f.name,
+                      subtitle: <>Anexo em: <strong>{c.clientName}</strong></>,
+                      icon: Paperclip,
+                      data: c,
+                      action: () => { onSelectCase(c); onClose(); },
+                      score: 40
+                  });
+              }
+          });
+
+          // 8. History / Raio-X (Deepest Search)
+          // Search only latest 20 items to performance
+          // SAFEGUARD: Ensure history exists
+          (c.history || []).slice(-20).forEach(h => {
+              if (h.details && h.details.toLowerCase().includes(lowerQuery)) {
+                  items.push({
+                      id: `hist_${h.id}`,
+                      type: 'HISTORY',
+                      title: h.action,
+                      subtitle: <><HighlightMatch text={h.details.substring(0, 60)} match={debouncedQuery}/>... em <strong>{c.clientName}</strong></>,
+                      icon: History,
+                      data: c,
+                      action: () => { onSelectCase(c); onClose(); },
+                      score: 30
                   });
               }
           });
       });
 
-      return items.slice(0, 15); // Limit results
-  }, [query, cases, recentIds]);
+      // Sort by score then alphabetical
+      return items.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 20); // Limit results
+  }, [debouncedQuery, cases, recentIds]);
 
   // Keyboard Navigation
   useEffect(() => {
@@ -158,9 +259,18 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
           if (e.key === 'ArrowDown') {
               e.preventDefault();
               setSelectedIndex(prev => (prev + 1) % results.length);
+              // Auto-scroll
+              if (listRef.current) {
+                  const el = listRef.current.children[0].children[(selectedIndex + 1) % results.length] as HTMLElement;
+                  if (el) el.scrollIntoView({ block: 'nearest' });
+              }
           } else if (e.key === 'ArrowUp') {
               e.preventDefault();
               setSelectedIndex(prev => (prev - 1 + results.length) % results.length);
+              if (listRef.current) {
+                  const el = listRef.current.children[0].children[(selectedIndex - 1 + results.length) % results.length] as HTMLElement;
+                  if (el) el.scrollIntoView({ block: 'nearest' });
+              }
           } else if (e.key === 'Enter') {
               e.preventDefault();
               if (results[selectedIndex]) {
@@ -180,9 +290,12 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
   const renderGroupTitle = (type: string) => {
       switch(type) {
           case 'RECENT': return 'Acessados Recentemente';
-          case 'CLIENT': return 'Clientes Encontrados';
+          case 'CLIENT': return 'Clientes';
           case 'CASE': return 'Processos';
-          case 'TASK': return 'Tarefas Pendentes';
+          case 'TASK': return 'Tarefas';
+          case 'NOTE': return 'Notas & Post-its';
+          case 'FILE': return 'Arquivos';
+          case 'HISTORY': return 'Histórico (Raio-X)';
           default: return 'Resultados';
       }
   };
@@ -197,7 +310,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
             <input 
                 ref={inputRef}
                 type="text" 
-                placeholder="Buscar clientes, processos, tarefas..." 
+                placeholder="Busque tudo: Clientes, Notas, Arquivos, Tarefas..." 
                 className="flex-1 bg-transparent outline-none text-xl text-slate-700 placeholder:text-slate-300 font-medium"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setSelectedIndex(0); }}
@@ -218,12 +331,12 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
                     {query ? (
                         <>
                             <p className="text-sm font-medium">Nenhum resultado encontrado.</p>
-                            <p className="text-xs opacity-70">Tente buscar por nome, CPF ou número do processo.</p>
+                            <p className="text-xs opacity-70">Tente buscar por partes do nome ou conteúdo.</p>
                         </>
                     ) : (
                         <>
                             <p className="text-sm font-medium">Comece a digitar para buscar...</p>
-                            <p className="text-xs opacity-70">Encontre qualquer coisa no escritório.</p>
+                            <p className="text-xs opacity-70">O sistema pesquisará em todos os campos.</p>
                         </>
                     )}
                 </div>
@@ -236,25 +349,27 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
                         return (
                             <React.Fragment key={item.id}>
                                 {showHeader && (
-                                    <div className="px-3 pt-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider sticky top-0 bg-slate-50/95 backdrop-blur z-10">
+                                    <div className="px-3 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider sticky top-0 bg-slate-50/95 backdrop-blur z-10 flex items-center gap-2">
+                                        {item.type === 'NOTE' ? <StickyNote size={10}/> : item.type === 'TASK' ? <CheckSquare size={10}/> : null}
                                         {renderGroupTitle(item.type)}
                                     </div>
                                 )}
                                 <button
                                     onClick={item.action}
                                     onMouseEnter={() => setSelectedIndex(idx)}
-                                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-all duration-200 group ${isSelected ? 'bg-white shadow-sm ring-1 ring-blue-500/20 z-10' : 'hover:bg-slate-100/50'}`}
+                                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-all duration-200 group ${isSelected ? 'bg-white shadow-md ring-1 ring-blue-500/20 z-10 scale-[1.01]' : 'hover:bg-slate-100/50'}`}
                                 >
                                     <div className={`p-2.5 rounded-lg flex-shrink-0 transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-slate-200 text-slate-500 group-hover:bg-white group-hover:text-blue-500'}`}>
                                         <item.icon size={20} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <h4 className={`text-sm font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>
-                                            {item.title}
+                                        <h4 className={`text-sm font-bold truncate flex items-center gap-2 ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>
+                                            <HighlightMatch text={item.title} match={debouncedQuery} />
                                         </h4>
-                                        <p className={`text-xs truncate ${isSelected ? 'text-blue-600/70' : 'text-slate-400'}`}>
+                                        <div className={`text-xs truncate flex items-center gap-1 ${isSelected ? 'text-blue-600/70' : 'text-slate-400'}`}>
+                                            {item.type === 'HISTORY' || item.type === 'NOTE' ? <CornerDownRight size={10} className="inline"/> : null}
                                             {item.subtitle}
-                                        </p>
+                                        </div>
                                     </div>
                                     {isSelected && <ArrowRight size={18} className="text-blue-500 animate-pulse mr-2" />}
                                 </button>
@@ -272,7 +387,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, cas
                 <span className="flex items-center gap-1"><kbd className="bg-white border border-slate-300 rounded px-1 font-sans">↑↓</kbd> navegar</span>
             </div>
             <div>
-                <strong>Rambo Prev</strong> Busca Otimizada
+                <strong>Rambo Prev</strong> Deep Search
             </div>
         </div>
 

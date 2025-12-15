@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, X, Send, Copy, FileText, ChevronRight } from 'lucide-react';
+import { MessageCircle, X, Send, Copy, FileText, ChevronRight, Eraser } from 'lucide-react';
 import { Case, INSSAgency, WhatsAppTemplate } from '../types';
 import { WHATSAPP_TEMPLATES as DEFAULT_TEMPLATES } from '../constants';
 import { formatDate, getLocationAddress } from '../utils';
@@ -19,6 +19,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   // Use passed templates or fallback to constants if not yet loaded
   const availableTemplates = templates && templates.length > 0 ? templates : DEFAULT_TEMPLATES;
   
+  // Default to the first one (usually 'Simple Hello')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(availableTemplates[0]?.id || '');
   const [message, setMessage] = useState('');
 
@@ -31,14 +32,23 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     }
 
     // Resolve Location Address Smartly (INSS or Court)
-    const fullLocation = getLocationAddress(data.periciaLocation);
+    const fullLocation = getLocationAddress(data.periciaLocation) || '[LOCAL DA PERÍCIA]';
+
+    // Gender Logic
+    const isFemale = data.sex === 'FEMALE';
+    const saudacao = isFemale ? 'Sra.' : 'Sr.';
+    const prezado = isFemale ? 'Prezada' : 'Prezado';
+    const artigo = isFemale ? 'a' : 'o';
 
     return text
-      .replace('{NOME}', data.clientName.split(' ')[0]) // Primeiro nome
+      .replace('{NOME}', data.clientName.split(' ')[0] || '[NOME DO CLIENTE]') // Primeiro nome
+      .replace('{SAUDACAO}', saudacao) // Sr. ou Sra.
+      .replace('{PREZADO}', prezado) // Prezado ou Prezada
+      .replace('{ARTIGO}', artigo) // o ou a
       .replace('{ID_INTERNO}', data.internalId)
       .replace('{NB}', data.benefitNumber || 'não informado')
       .replace('{PROTOCOLO}', data.protocolNumber || 'não informado')
-      .replace('{DATA_PERICIA}', formatDate(data.periciaDate) || 'não agendada')
+      .replace('{DATA_PERICIA}', formatDate(data.periciaDate) || '[DATA A DEFINIR]')
       .replace('{LOCAL_PERICIA}', fullLocation)
       .replace('{DATA_DCB}', formatDate(data.dcbDate) || 'não informada')
       .replace('{LISTA_DOCS}', docsList);
@@ -105,8 +115,13 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     alert("Mensagem copiada!");
   };
 
+  const handleClear = () => {
+      setMessage('');
+      setSelectedTemplateId('');
+  };
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col md:flex-row h-[500px]">
         
         {/* LEFT: Sidebar Templates */}
@@ -145,13 +160,20 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 </button>
             </div>
 
-            <div className="flex-1 bg-slate-50 rounded-lg border border-slate-200 p-2 mb-4 focus-within:ring-2 focus-within:ring-green-100 focus-within:border-green-400 transition-all">
+            <div className="flex-1 bg-slate-50 rounded-lg border border-slate-200 p-2 mb-4 focus-within:ring-2 focus-within:ring-green-100 focus-within:border-green-400 transition-all relative">
                 <textarea 
                     className="w-full h-full bg-transparent border-none focus:ring-0 text-slate-700 text-sm resize-none"
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    onChange={(e) => { setMessage(e.target.value); setSelectedTemplateId(''); }}
                     placeholder="Digite sua mensagem..."
                 ></textarea>
+                <button 
+                    onClick={handleClear}
+                    className="absolute bottom-2 right-2 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    title="Limpar texto"
+                >
+                    <Eraser size={16} />
+                </button>
             </div>
 
             <div className="flex justify-end gap-3">

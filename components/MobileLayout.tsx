@@ -1,10 +1,9 @@
 
-
 import React, { useState } from 'react';
-import { ViewType, Case, User, ColumnDefinition, SystemSettings, SystemTag, StickyNote } from '../types';
+import { ViewType, Case, User, ColumnDefinition, SystemSettings, SystemTag } from '../types';
 import { VIEW_CONFIG, VIEW_THEMES } from '../constants';
 import { CaseCard } from './CaseCard';
-import { Search, Menu, Plus, Calendar, CheckSquare, BarChart2, Bell, Filter } from 'lucide-react';
+import { Search, Plus, Calendar, CheckSquare, BarChart2, Bell, Filter } from 'lucide-react';
 
 interface MobileLayoutProps {
   officeName: string;
@@ -26,7 +25,6 @@ interface MobileLayoutProps {
   notificationsCount: number;
   systemSettings: SystemSettings;
   systemTags?: SystemTag[];
-  onStickyNote?: (c: Case, note?: StickyNote) => void;
 }
 
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
@@ -34,7 +32,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   cases, filteredCases, columns, searchTerm, setSearchTerm,
   onSelectCase, onNewCase,
   onOpenDashboard, onOpenCalendar, onOpenTasks, onLogout,
-  users, notificationsCount, systemSettings, systemTags, onStickyNote
+  users, notificationsCount, systemSettings, systemTags
 }) => {
   const activeTheme = VIEW_THEMES[currentView];
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -56,8 +54,23 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       <div className="bg-white px-4 py-3 border-b border-slate-200 shadow-sm sticky top-0 z-30">
         <div className="flex justify-between items-center mb-3">
             <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${activeTheme.bgGradient} flex items-center justify-center`}>
-                    <span className="font-bold text-xs text-slate-700">{officeName.charAt(0)}</span>
+                {/* NEW LOGO SMALL */}
+                <div className="w-9 h-9">
+                    <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
+                        <defs>
+                            <linearGradient id="mobBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#0ea5e9" />
+                                <stop offset="100%" stopColor="#1e3a8a" />
+                            </linearGradient>
+                            <linearGradient id="mobGreen" x1="100%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#10b981" />
+                                <stop offset="100%" stopColor="#15803d" />
+                            </linearGradient>
+                        </defs>
+                        <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(45 50 50)" stroke="url(#mobBlue)" strokeWidth="12" strokeLinecap="round" />
+                        <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(-45 50 50)" stroke="url(#mobGreen)" strokeWidth="12" strokeLinecap="round" />
+                        <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(45 50 50)" stroke="url(#mobBlue)" strokeWidth="12" strokeLinecap="round" strokeDasharray="30 100" strokeDashoffset="-78" pathLength="100" />
+                    </svg>
                 </div>
                 <h1 className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{officeName}</h1>
             </div>
@@ -94,7 +107,6 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
         {(Object.keys(VIEW_CONFIG) as ViewType[]).map((view) => {
             const config = VIEW_CONFIG[view];
             const isActive = currentView === view;
-            const theme = VIEW_THEMES[view];
             return (
                 <button
                     key={view}
@@ -137,9 +149,9 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
                                 currentUser={currentUser}
                                 recurrentCount={0}
                                 isDragging={false}
+                                isDraggable={false} // Disable dragging for smoother scroll
                                 systemSettings={systemSettings}
-                                systemTags={systemTags}
-                                onStickyNote={onStickyNote}
+                                systemTags={systemTags || []}
                             />
                         ))}
                     </div>

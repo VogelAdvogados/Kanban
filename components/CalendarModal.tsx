@@ -1,194 +1,219 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight, Calendar, AlertCircle, Clock, CheckCircle, User } from 'lucide-react';
-import { Case, Appointment } from '../types';
-import { parseLocalYMD } from '../utils';
-import { db } from '../services/database';
+import React from 'react';
+import { X, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus, ArrowRight } from 'lucide-react';
+import { Case } from '../types';
+import { useCalendarLogic, CalendarEvent } from '../hooks/useCalendarLogic';
 
 interface CalendarModalProps {
   cases: Case[];
   onClose: () => void;
+  onSelectCase: (c: Case) => void;
+  onNewAppointment?: (date: Date) => void;
 }
 
-export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+export const CalendarModal: React.FC<CalendarModalProps> = ({ cases, onClose, onSelectCase, onNewAppointment }) => {
+  const {
+      selectedDate, monthLabel, calendarCells, selectedEvents,
+      handlePrevMonth, handleNextMonth, handleJumpToday, isToday, isSelected
+  } = useCalendarLogic(cases);
 
-  useEffect(() => {
-      db.getAppointments().then(setAppointments);
-  }, []);
-
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
-
-  const monthName = currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-
-  // Map events to dates
-  const eventsByDate = useMemo(() => {
-    const map: Record<number, any[]> = {};
-    
-    // 1. Appointments (Purple)
-    appointments.forEach(appt => {
-        if(appt.status === 'CANCELLED') return;
-        const d = new Date(appt.date);
-        if (d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
-            const day = d.getDate();
-            if (!map[day]) map[day] = [];
-            map[day].push({ 
-                type: 'APPOINTMENT', 
-                label: `Consulta: ${appt.clientName} (${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')})`, 
-                color: 'bg-purple-500' 
-            });
-        }
-    });
-
-    // 2. Case Events
-    cases.forEach(c => {
-        // Deadlines (Red)
-        if (c.deadlineEnd) {
-            const d = parseLocalYMD(c.deadlineEnd);
-            if (d && d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
-                const day = d.getDate();
-                if (!map[day]) map[day] = [];
-                map[day].push({ type: 'DEADLINE', label: `Prazo: ${c.clientName}`, color: 'bg-red-500' });
-            }
-        }
-        // Pericias (Orange)
-        if (c.periciaDate) {
-             const d = new Date(c.periciaDate);
-            if (d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
-                const day = d.getDate();
-                if (!map[day]) map[day] = [];
-                map[day].push({ 
-                    type: 'PERICIA', 
-                    label: `Perícia: ${c.clientName} (${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')})`, 
-                    color: 'bg-orange-500' 
-                });
-            }
-        }
-        // DCB (Yellow)
-        if (c.dcbDate) {
-            const d = parseLocalYMD(c.dcbDate);
-            if (d && d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear()) {
-                const day = d.getDate();
-                if (!map[day]) map[day] = [];
-                map[day].push({ type: 'DCB', label: `Cessação: ${c.clientName}`, color: 'bg-yellow-500' });
-            }
-        }
-    });
-    return map;
-  }, [cases, currentDate, appointments]);
-
-  const changeMonth = (delta: number) => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + delta, 1));
-    setSelectedDay(null);
+  const getEventColorClass = (type: string) => {
+      switch(type) {
+          case 'APPOINTMENT': return 'bg-purple-100 text-purple-700 border-purple-200';
+          case 'DEADLINE': return 'bg-red-50 text-red-700 border-red-200';
+          case 'PERICIA': return 'bg-orange-50 text-orange-700 border-orange-200';
+          case 'DCB': return 'bg-amber-50 text-amber-700 border-amber-200';
+          default: return 'bg-slate-50 text-slate-700 border-slate-200';
+      }
   };
 
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const handleEventClick = (ev: CalendarEvent) => {
+      if (ev.caseObj) {
+          onSelectCase(ev.caseObj);
+      }
+  };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] h-[90vh] flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-white/20">
         
-        {/* CALENDAR GRID */}
-        <div className="flex-1 p-6 flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+        {/* LEFT: CALENDAR GRID */}
+        <div className="flex-1 flex flex-col bg-white">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded-full"><ChevronLeft/></button>
-                    <h2 className="text-xl font-bold text-slate-800 capitalize">{monthName}</h2>
-                    <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded-full"><ChevronRight/></button>
+                    <div className="flex items-center gap-1 bg-slate-50 rounded-lg p-1 border border-slate-200">
+                        <button onClick={handlePrevMonth} className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-500 transition-all"><ChevronLeft size={18}/></button>
+                        <button onClick={handleNextMonth} className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-500 transition-all"><ChevronRight size={18}/></button>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight">{monthLabel}</h2>
                 </div>
-                <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-full text-slate-400 md:hidden">
-                    <X size={24} />
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={handleJumpToday}
+                        className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg border border-slate-200 transition-colors"
+                    >
+                        Hoje
+                    </button>
+                    <button onClick={onClose} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg text-slate-400 transition-colors md:hidden">
+                        <X size={20} />
+                    </button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 text-center mb-2 flex-shrink-0">
-                {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => (
-                    <div key={d} className="text-xs font-bold text-slate-400">{d}</div>
+            {/* Weekdays */}
+            <div className="grid grid-cols-7 border-b border-slate-100">
+                {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map((d, i) => (
+                    <div key={d} className={`py-3 text-[10px] font-bold text-center uppercase tracking-widest ${i === 0 || i === 6 ? 'text-slate-400 bg-slate-50/50' : 'text-slate-500'}`}>
+                        {d}
+                    </div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-2 flex-1 auto-rows-fr overflow-y-auto kanban-scroll pr-2">
-                {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`empty-${i}`} />)}
-                
-                {Array.from({ length: daysInMonth }).map((_, i) => {
-                    const day = i + 1;
-                    const hasEvents = eventsByDate[day];
-                    const isSelected = selectedDay === day;
-                    const isToday = new Date().getDate() === day && new Date().getMonth() === new Date().getMonth() && new Date().getFullYear() === new Date().getFullYear();
+            {/* Days Grid */}
+            <div className="flex-1 grid grid-cols-7 auto-rows-fr bg-slate-50/30 overflow-y-auto">
+                {calendarCells.map((cell, idx) => {
+                    if (!cell) return <div key={`empty-${idx}`} className="border-b border-r border-slate-100 bg-slate-50/30 min-h-[100px]" />;
+                    
+                    const selected = isSelected(cell.date);
+                    const today = isToday(cell.date);
 
                     return (
-                        <button 
-                            key={day}
-                            onClick={() => setSelectedDay(day)}
-                            className={`rounded-lg border p-1 flex flex-col items-center justify-start transition-all min-h-[80px] ${isSelected ? 'border-blue-500 bg-white ring-2 ring-blue-200 shadow-md' : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'} ${isToday ? 'bg-yellow-50 font-bold text-slate-900' : 'text-slate-600'}`}
+                        <div 
+                            key={cell.key}
+                            onClick={() => selected ? null : (cell.date && onNewAppointment && onNewAppointment(cell.date))} // Placeholder interaction
+                            className={`
+                                relative p-2 border-b border-r border-slate-100 min-h-[100px] cursor-pointer transition-all group
+                                ${selected ? 'bg-blue-50/50 ring-2 ring-inset ring-blue-400 z-10' : 'hover:bg-white hover:shadow-inner'}
+                                ${today ? 'bg-blue-50/10' : ''}
+                            `}
                         >
-                            <span className="text-xs mb-1">{day}</span>
-                            <div className="flex gap-1 flex-wrap justify-center w-full px-1">
-                                {hasEvents?.slice(0, 4).map((ev: any, idx: number) => (
-                                    <div key={idx} className={`w-2 h-2 rounded-full ${ev.color}`} title={ev.label}></div>
-                                ))}
-                                {hasEvents && hasEvents.length > 4 && <span className="text-[8px] text-slate-400">+</span>}
+                            <div className="flex justify-between items-start">
+                                <span className={`
+                                    text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full transition-colors
+                                    ${today ? 'bg-blue-600 text-white shadow-md' : selected ? 'text-blue-700' : 'text-slate-700 group-hover:bg-slate-100'}
+                                `}>
+                                    {cell.day}
+                                </span>
+                                {today && <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wider mt-1 mr-1">Hoje</span>}
                             </div>
-                        </button>
+
+                            {/* Event Indicators (Pills) */}
+                            <div className="mt-2 space-y-1">
+                                {cell.events.slice(0, 3).map(ev => (
+                                    <div key={ev.id} className={`h-1.5 rounded-full w-full ${ev.color} opacity-80`} title={ev.title}></div>
+                                ))}
+                                {cell.events.length > 3 && (
+                                    <div className="text-[9px] text-slate-400 font-bold pl-1">+ {cell.events.length - 3}</div>
+                                )}
+                            </div>
+                            
+                            {/* Hover Add Button */}
+                            {onNewAppointment && (
+                                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onNewAppointment(cell.date); }}
+                                        className="p-1.5 bg-white text-blue-600 rounded-full shadow-sm border border-blue-100 hover:bg-blue-50"
+                                    >
+                                        <Plus size={14}/>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     );
                 })}
             </div>
         </div>
 
-        {/* SIDEBAR DETAILS */}
-        <div className="w-full md:w-80 bg-slate-50 border-l border-slate-200 p-6 flex flex-col overflow-y-auto relative">
-            <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-slate-200 rounded-full text-slate-400 hidden md:block">
-                <X size={20} />
-            </button>
-
-            <div className="flex justify-between items-start mb-6 flex-shrink-0 mt-8 md:mt-0">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                    <Calendar className="text-blue-600"/> 
-                    {selectedDay ? `${selectedDay} de ${monthName}` : 'Eventos do Mês'}
-                </h3>
+        {/* RIGHT: AGENDA SIDEBAR */}
+        <div className="w-full md:w-96 bg-slate-50 border-l border-slate-200 flex flex-col h-full shadow-2xl z-20">
+            {/* Sidebar Header */}
+            <div className="p-6 border-b border-slate-200 bg-white flex justify-between items-start">
+                <div>
+                    <h3 className="text-4xl font-light text-slate-800">{selectedDate.getDate()}</h3>
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide mt-1">
+                        {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', month: 'long' })}
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    {onNewAppointment && (
+                        <button 
+                            onClick={() => onNewAppointment(selectedDate)}
+                            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md transition-colors flex items-center justify-center"
+                            title="Adicionar Evento"
+                        >
+                            <Plus size={20} />
+                        </button>
+                    )}
+                    <button onClick={onClose} className="hidden md:block p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+                        <X size={24} />
+                    </button>
+                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3">
-                {selectedDay ? (
-                    eventsByDate[selectedDay] ? (
-                        eventsByDate[selectedDay].map((ev: any, idx: number) => (
-                            <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-start gap-3 animate-in fade-in slide-in-from-right-2 duration-300" style={{animationDelay: `${idx * 50}ms`}}>
-                                <div className={`w-2 h-2 mt-1.5 rounded-full flex-shrink-0 ${ev.color}`}></div>
-                                <div>
-                                    <p className="text-sm font-bold text-slate-700">{ev.label}</p>
-                                    <p className="text-xs text-slate-500 capitalize">
-                                        {ev.type === 'DEADLINE' ? 'Prazo Fatal' : ev.type === 'PERICIA' ? 'Perícia' : ev.type === 'APPOINTMENT' ? 'Atendimento' : 'Cessação (DCB)'}
-                                    </p>
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-center text-slate-400 text-sm mt-10">Nada agendado para este dia.</p>
-                    )
-                ) : (
-                    <div className="text-center text-slate-400 text-xs italic mt-10">
-                        <p>Selecione um dia no calendário para ver os detalhes.</p>
+            {/* Events List (Timeline) */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {selectedEvents.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
+                        <CalendarIcon size={48} className="mb-4 text-slate-300"/>
+                        <p className="text-sm font-medium">Nenhum compromisso.</p>
+                        <p className="text-xs">Aproveite o dia livre!</p>
                     </div>
+                ) : (
+                    selectedEvents.map((ev, idx) => (
+                        <div key={idx} className="flex gap-4 group">
+                            {/* Time Column */}
+                            <div className="flex flex-col items-end w-14 flex-shrink-0 pt-1">
+                                <span className="text-sm font-bold text-slate-700">{ev.time || '--:--'}</span>
+                                {idx !== selectedEvents.length - 1 && (
+                                    <div className="w-px h-full bg-slate-200 my-2 mr-2 group-last:hidden"></div>
+                                )}
+                            </div>
+
+                            {/* Card */}
+                            <div 
+                                onClick={() => handleEventClick(ev)}
+                                className={`flex-1 p-3 rounded-xl border border-l-4 shadow-sm bg-white hover:shadow-md transition-all cursor-pointer ${getEventColorClass(ev.type).replace('text-', 'border-l-')} hover:scale-[1.02]`}
+                            >
+                                <div className="flex items-start justify-between mb-1">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 w-fit ${getEventColorClass(ev.type)}`}>
+                                        <ev.icon size={10} /> {ev.type === 'APPOINTMENT' ? 'Agenda' : ev.type === 'DEADLINE' ? 'Prazo' : ev.type === 'PERICIA' ? 'Perícia' : 'DCB'}
+                                    </span>
+                                </div>
+                                <h4 className="font-bold text-slate-800 text-sm">{ev.title}</h4>
+                                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{ev.subtitle}</p>
+                                {ev.caseId && (
+                                    <div className="mt-2 pt-2 border-t border-slate-50 flex justify-end">
+                                        <span className="text-[10px] text-blue-500 font-bold flex items-center gap-1 hover:underline">
+                                            Ver Processo <ArrowRight size={10}/>
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))
                 )}
             </div>
-            
-            <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-2 flex-shrink-0">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <div className="w-2 h-2 rounded-full bg-red-500"></div> Prazo
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <div className="w-2 h-2 rounded-full bg-orange-500"></div> Perícia
-                </div>
-                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div> DCB
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <div className="w-2 h-2 rounded-full bg-purple-500"></div> Consulta
+
+            {/* Summary Footer */}
+            <div className="p-4 bg-white border-t border-slate-200">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div> Prazos Fatais
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div> Perícias
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> Atendimentos
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> Cessação (DCB)
+                    </div>
                 </div>
             </div>
         </div>
+
       </div>
     </div>
   );

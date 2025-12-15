@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ViewType, User, Notification, Case } from '../types';
-import { VIEW_CONFIG, VIEW_THEMES, SYSTEM_TAGS, APP_THEMES } from '../constants';
-import { Search, LogOut, ExternalLink, Bell, LayoutGrid, CheckSquare, Users, Calendar, BarChart2, Settings, Plus, ChevronDown, Menu, Tag, Command, Scale, UserCircle } from 'lucide-react';
+import { VIEW_CONFIG, APP_THEMES, SYSTEM_TAGS } from '../constants';
+import { Search, LogOut, Bell, CheckSquare, Users, Calendar, BarChart2, Settings, Plus, ChevronDown, Tag, UserCircle, Briefcase, Gavel, Scale, Shield, User as UserIcon, FileCheck, Archive, FileText } from 'lucide-react';
 import { NotificationsPanel } from './NotificationsPanel';
+import { hasPermission } from '../utils';
 
 interface HeaderProps {
   officeName: string;
@@ -17,200 +18,220 @@ interface HeaderProps {
   setResponsibleFilter: (id: string) => void;
   urgencyFilter: string;
   setUrgencyFilter: (val: string) => void;
-  tagFilter?: string; // New Tag Filter
+  tagFilter?: string;
   setTagFilter?: (val: string) => void;
   onNewCase: () => void;
-  onOpenCmdK: () => void; // This will now open Global Search
-  
-  // Direct Actions
+  onOpenCmdK: () => void;
   onOpenDashboard: () => void;
   onOpenCalendar: () => void;
   onOpenTasks: () => void;
   onOpenClients: () => void;
   onOpenLogs: () => void;
   onOpenSettings: () => void;
-
+  onOpenTemplates?: () => void;
   allCases: Case[];
   users: User[];
   notifications: Notification[];
   onMarkNotificationAsRead: (id: string) => void;
   onMarkAllNotificationsAsRead: () => void;
   onSelectCase: (c: Case) => void;
+  onThemeChange?: (themeId: string) => void; 
 }
+
+const DynamicIcon = ({ name, size = 16, className = "" }: { name: string, size?: number, className?: string }) => {
+    const icons: Record<string, any> = { User: UserIcon, Briefcase, Gavel, Scale, Shield, UserCircle };
+    const IconComponent = icons[name] || UserIcon;
+    return <IconComponent size={size} className={className} />;
+};
 
 export const Header: React.FC<HeaderProps> = ({
   officeName, currentUser, onLogout, currentView, setCurrentView, searchTerm, setSearchTerm,
   responsibleFilter, setResponsibleFilter, urgencyFilter, setUrgencyFilter, tagFilter, setTagFilter,
   onNewCase, onOpenCmdK,
-  onOpenDashboard, onOpenCalendar, onOpenTasks, onOpenClients, onOpenLogs, onOpenSettings,
-  allCases, users, notifications, onMarkNotificationAsRead, onMarkAllNotificationsAsRead, onSelectCase
+  onOpenDashboard, onOpenCalendar, onOpenTasks, onOpenClients, onOpenLogs, onOpenSettings, onOpenTemplates,
+  allCases, users, notifications, onMarkNotificationAsRead, onMarkAllNotificationsAsRead, onSelectCase,
+  onThemeChange
 }) => {
   
-  const [linksOpen, setLinksOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
   
-  // --- THEME LOGIC ---
+  // THEME LOGIC
   const activeThemeId = currentUser.themePref || 'default';
-  const themeConfig = APP_THEMES.find(t => t.id === activeThemeId);
+  const themeConfig = APP_THEMES.find(t => t.id === activeThemeId) || APP_THEMES[0];
   
-  // Use theme colors or fall back to original defaults
-  const topBarClass = themeConfig?.headerTop || 'bg-[#f0f2f5]';
-  const bottomBarClass = themeConfig?.headerBottom || 'bg-[#1e3a8a]';
+  const topBarClass = themeConfig.headerTop || 'bg-[#f0f2f5]';
+  const bottomBarClass = themeConfig.headerBottom || 'bg-white';
+  const textClass = themeConfig.headerText || 'text-slate-800'; // Solves contrast issue
+  const searchBgClass = themeConfig.searchBg || 'bg-white border-slate-300'; // Solves search bar visibility
 
-  const EXTERNAL_LINKS = [
-    { label: 'Meu INSS', url: 'https://meu.inss.gov.br/' },
-    { label: 'SAG / INSS Digital', url: 'https://requerimento.inss.gov.br/' },
-    { label: 'Consulta Processual', url: 'https://eproc.trf4.jus.br/' },
-    { label: 'CRPS (Recursos)', url: 'https://consultaprocessos.inss.gov.br/' },
-    { label: 'Cálculos (Prev)', url: 'https://previdenciarista.com/' },
-  ];
+  const NavItem = ({ label, icon: Icon, active, onClick, iconOnly = false }: any) => {
+      
+      const isBottomDark = ['default', 'dark', 'midnight', 'royal'].includes(themeConfig.id);
+      
+      let containerClass = '';
+      let activeClass = '';
+      let inactiveClass = '';
+      let iconColor = '';
 
-  // Helper for Top Bar Icons
-  const TopBarIcon = ({ icon: Icon, onClick, badge, title }: any) => (
-    <button 
-        onClick={onClick}
-        className="p-2 text-slate-500 hover:text-blue-700 hover:bg-slate-200 rounded transition-colors relative"
-        title={title}
-    >
-        <Icon size={20} strokeWidth={1.5} />
-        {badge > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-100"></span>
-        )}
-    </button>
-  );
+      if (iconOnly) {
+          if (isBottomDark) {
+              containerClass = 'text-white/70 hover:bg-white/10 hover:text-white';
+              activeClass = 'bg-white/20 text-white ring-1 ring-white/30';
+          } else {
+              containerClass = 'text-slate-500 hover:bg-slate-100 hover:text-blue-700';
+              activeClass = 'bg-blue-50 text-blue-700 border-blue-100';
+          }
+      } else {
+          if (isBottomDark) {
+              inactiveClass = 'text-white/70 border-transparent hover:text-white hover:bg-white/5 font-medium';
+              activeClass = 'text-white border-white bg-white/10 font-bold';
+              iconColor = active ? 'text-white' : 'text-white/70';
+          } else {
+              inactiveClass = 'text-slate-500 border-transparent hover:text-slate-800 hover:bg-slate-50 font-medium';
+              activeClass = 'text-blue-700 border-blue-600 bg-blue-50/50 font-bold';
+              iconColor = active ? 'text-blue-600' : 'text-slate-400';
+          }
+      }
 
-  // Helper for Bottom Bar Navigation Items (Refactored for Theming)
-  const NavItem = ({ label, icon: Icon, active, onClick }: any) => (
-    <button 
-        onClick={onClick}
-        className={`
-            flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap
-            ${active 
-                ? 'text-white bg-black/20 rounded-md shadow-sm border border-white/10' 
-                : 'text-white/70 hover:text-white hover:bg-white/10 rounded-md'
-            }
-        `}
-    >
-        {Icon && <Icon size={16} className={active ? 'opacity-100' : 'opacity-70'} />}
-        {label}
-    </button>
-  );
+      return (
+        <button 
+            onClick={onClick} 
+            title={label}
+            className={`
+                relative flex items-center justify-center gap-2 transition-all duration-200 group
+                ${iconOnly 
+                    ? `p-2 rounded-lg ${active ? activeClass : containerClass}` 
+                    : `px-4 py-2 text-sm rounded-t-lg border-b-4 ${active ? activeClass : inactiveClass}`
+                }
+            `}
+        >
+            {Icon && <Icon size={iconOnly ? 20 : 16} className={!iconOnly ? iconColor : ''} />}
+            {!iconOnly && <span>{label}</span>}
+            {iconOnly && (
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-lg font-bold">
+                    {label}
+                </span>
+            )}
+        </button>
+      );
+  };
+
+  const isBottomDark = ['default', 'dark', 'midnight', 'royal'].includes(themeConfig.id);
+  const canViewLogs = hasPermission(currentUser, 'VIEW_LOGS');
+  const canManageSettings = hasPermission(currentUser, 'MANAGE_SETTINGS') || hasPermission(currentUser, 'MANAGE_USERS');
 
   return (
     <header className="flex flex-col z-40 relative shadow-md">
         
-        {/* --- 1. TOP BAR (User Identity & Tools) --- */}
-        <div className={`${topBarClass} h-16 px-6 flex items-center justify-between border-b border-slate-300 transition-colors duration-500`}>
+        {/* TOP BAR */}
+        <div className={`${topBarClass} h-16 px-4 lg:px-6 flex items-center justify-between border-b border-white/10 transition-colors duration-500 gap-4`}>
             
-            {/* LEFT: System Identity */}
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-800 rounded-lg flex items-center justify-center shadow-sm text-white font-bold text-lg border border-blue-900/20">
-                    <Scale size={22} strokeWidth={2.5} />
+            {/* Logo & Title */}
+            <div className="flex items-center gap-3 w-64 flex-shrink-0">
+                <div className="w-9 h-9 relative hover:scale-105 transition-transform">
+                    <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md" fill="none">
+                        <defs>
+                            <linearGradient id="headerBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#0ea5e9" />
+                                <stop offset="100%" stopColor="#1e3a8a" />
+                            </linearGradient>
+                            <linearGradient id="headerGreen" x1="100%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#10b981" />
+                                <stop offset="100%" stopColor="#15803d" />
+                            </linearGradient>
+                        </defs>
+                        <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(45 50 50)" stroke="url(#headerBlue)" strokeWidth="14" strokeLinecap="round" />
+                        <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(-45 50 50)" stroke="url(#headerGreen)" strokeWidth="14" strokeLinecap="round" />
+                    </svg>
                 </div>
-                <div className="flex flex-col justify-center">
-                    <h1 className="font-bold text-xl text-blue-900 leading-none tracking-tight">Rambo Prev</h1>
-                    <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Sistema Jurídico</span>
+                <h1 className={`font-bold text-xl tracking-tight font-sans hidden md:block ${textClass}`}>
+                    {officeName || 'Rambo Prev'}
+                </h1>
+            </div>
+
+            {/* Search Bar */}
+            <div className="flex-1 max-w-xl mx-auto">
+                <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className={`h-4 w-4 transition-colors ${textClass} opacity-60`} />
+                    </div>
+                    <input
+                        type="text"
+                        className={`
+                            block w-full pl-10 pr-10 py-2 border rounded-full leading-5 focus:outline-none focus:ring-2 sm:text-sm transition-all shadow-sm cursor-text
+                            ${searchBgClass} ${textClass} focus:ring-opacity-50
+                        `}
+                        placeholder="Buscar processos, clientes ou comandos (Cmd+K)..."
+                        onClick={onOpenCmdK}
+                        readOnly
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <span className={`text-[10px] font-mono border rounded px-1.5 opacity-60 ${textClass} border-current`}>/</span>
+                    </div>
                 </div>
             </div>
 
-            {/* CENTER: Office Name */}
-            <div className="hidden lg:flex flex-col items-center absolute left-1/2 -translate-x-1/2">
-                <span className="text-lg font-bold text-slate-800 tracking-tight">{officeName || 'Vogel Advogados'}</span>
-            </div>
-
-            {/* RIGHT: Utilities & Profile */}
-            <div className="flex items-center gap-1 md:gap-3">
-                <div className="hidden md:flex items-center gap-1 border-r border-slate-300 pr-3 mr-1">
-                    <div className="relative">
-                        <TopBarIcon icon={LayoutGrid} onClick={() => setLinksOpen(!linksOpen)} title="Links Úteis" />
-                         {linksOpen && (
-                            <>
-                            <div className="fixed inset-0 z-[88]" onClick={() => setLinksOpen(false)}></div>
-                            <div className="absolute top-10 right-0 w-56 bg-white rounded-lg shadow-xl border border-slate-200 z-[90] p-2 animate-in fade-in slide-in-from-top-2">
-                                <h4 className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Acesso Rápido</h4>
-                                {EXTERNAL_LINKS.map((link, idx) => (
-                                    <a 
-                                        key={idx} href={link.url} target="_blank" rel="noopener noreferrer"
-                                        className="flex items-center justify-between px-3 py-2.5 rounded hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors text-sm font-medium group"
-                                    >
-                                        {link.label}
-                                        <ExternalLink size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </a>
-                                ))}
-                            </div>
-                            </>
-                        )}
-                    </div>
-                    <div className="relative">
-                        <TopBarIcon icon={Bell} badge={unreadCount} onClick={() => setNotifOpen(!notifOpen)} title="Notificações" />
-                        {notifOpen && (
-                            <>
-                                <div className="fixed inset-0 z-[88]" onClick={() => setNotifOpen(false)}></div>
-                                <NotificationsPanel 
-                                    notifications={notifications}
-                                    onMarkAsRead={onMarkNotificationAsRead}
-                                    onMarkAllAsRead={onMarkAllNotificationsAsRead}
-                                    onSelectCase={(id) => {
-                                        const c = allCases.find(ac => ac.id === id);
-                                        if(c) onSelectCase(c);
-                                    }}
-                                    onClose={() => setNotifOpen(false)}
-                                />
-                            </>
-                        )}
-                    </div>
-                    <TopBarIcon icon={Settings} onClick={onOpenSettings} title="Configurações" />
-                </div>
-
-                {/* User Profile (Dropdown) */}
+            {/* Right Actions */}
+            <div className="flex items-center gap-2 w-64 justify-end">
                 <div className="relative">
-                    <div 
-                        className="flex items-center gap-3 pl-2 cursor-pointer hover:bg-slate-200 p-1.5 rounded-lg transition-colors group select-none" 
-                        onClick={() => setProfileOpen(!profileOpen)} 
-                        title="Opções do Usuário"
+                    <button 
+                        onClick={() => setNotifOpen(!notifOpen)}
+                        className={`p-2 rounded-full transition-colors relative ${themeConfig.menuHover} ${textClass}`}
+                        title="Notificações"
                     >
-                        <div className="text-right hidden md:block">
-                            <p className="text-xs font-bold text-slate-700">{currentUser.name}</p>
-                            <p className="text-[10px] text-slate-500 uppercase">{currentUser.role === 'LAWYER' ? 'Administrador' : currentUser.role}</p>
-                        </div>
-                        <div 
-                            className="w-9 h-9 rounded flex items-center justify-center text-sm font-bold text-white shadow-sm ring-2 ring-white"
-                            style={{ backgroundColor: currentUser.color || '#1e293b' }}
-                        >
-                            {currentUser.avatarInitials}
-                        </div>
-                        <ChevronDown size={14} className="text-slate-400 hidden md:block"/>
-                    </div>
+                        <Bell size={20} className="opacity-90"/>
+                        {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
+                    </button>
+                    {notifOpen && (
+                        <>
+                            <div className="fixed inset-0 z-[88]" onClick={() => setNotifOpen(false)}></div>
+                            <NotificationsPanel notifications={notifications} onMarkAsRead={onMarkNotificationAsRead} onMarkAllAsRead={onMarkAllNotificationsAsRead} onSelectCase={(id) => { const c = allCases.find(ac => ac.id === id); if(c) onSelectCase(c); }} onClose={() => setNotifOpen(false)} />
+                        </>
+                    )}
+                </div>
 
-                    {/* Profile Menu */}
+                <div className={`h-6 w-px mx-1 opacity-20 bg-current ${textClass}`}></div>
+
+                <div className="relative">
+                    <button 
+                        onClick={() => setProfileOpen(!profileOpen)}
+                        className={`flex items-center gap-2 pl-1 pr-2 py-1 rounded-full transition-all border border-transparent group ${themeConfig.menuHover}`}
+                    >
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-white/20" style={{ backgroundColor: currentUser.color || '#1e293b' }}>
+                            {currentUser.avatarIcon ? <DynamicIcon name={currentUser.avatarIcon} size={16} /> : currentUser.avatarInitials}
+                        </div>
+                        <ChevronDown size={14} className={`${textClass} opacity-70 group-hover:opacity-100`}/>
+                    </button>
+
                     {profileOpen && (
                         <>
                             <div className="fixed inset-0 z-[88]" onClick={() => setProfileOpen(false)}></div>
-                            <div className="absolute top-14 right-0 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-[90] p-1.5 animate-in fade-in slide-in-from-top-2">
-                                <div className="md:hidden px-3 py-2 border-b border-slate-100 mb-1">
-                                    <p className="text-xs font-bold text-slate-700">{currentUser.name}</p>
-                                    <p className="text-[10px] text-slate-500">{currentUser.role}</p>
+                            <div className="absolute top-12 right-0 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 z-[90] p-1.5 animate-in fade-in slide-in-from-top-2 text-slate-800">
+                                <div className="px-4 py-3 border-b border-slate-100 mb-1 bg-gradient-to-r from-slate-50 to-white rounded-t-lg">
+                                    <p className="text-sm font-bold text-slate-800">{currentUser.name}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mt-0.5">{currentUser.role === 'LAWYER' ? 'Advogado' : currentUser.role}</p>
                                 </div>
-                                <button 
-                                    onClick={() => { onOpenSettings(); setProfileOpen(false); }} 
-                                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors text-xs font-bold"
-                                >
+                                
+                                <button onClick={() => { onOpenSettings(); setProfileOpen(false); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors text-xs font-bold">
                                     <UserCircle size={16} /> Meu Perfil
                                 </button>
-                                <button 
-                                    onClick={() => { onOpenSettings(); setProfileOpen(false); }} 
-                                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors text-xs font-bold"
-                                >
-                                    <Settings size={16} /> Configurações
-                                </button>
+                                
+                                {canManageSettings && (
+                                    <>
+                                        <button onClick={() => { if(onOpenTemplates) onOpenTemplates(); setProfileOpen(false); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors text-xs font-bold">
+                                            <FileText size={16} /> Gerenciar Modelos
+                                        </button>
+                                        <button onClick={() => { onOpenSettings(); setProfileOpen(false); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors text-xs font-bold">
+                                            <Settings size={16} /> Configurações
+                                        </button>
+                                    </>
+                                )}
+
                                 <div className="h-px bg-slate-100 my-1"></div>
-                                <button 
-                                    onClick={onLogout} 
-                                    className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded hover:bg-red-50 text-slate-600 hover:text-red-600 transition-colors text-xs font-bold"
-                                >
-                                    <LogOut size={16} /> Sair
+                                <button onClick={onLogout} className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 text-slate-600 hover:text-red-600 transition-colors text-xs font-bold">
+                                    <LogOut size={16} /> Sair do Sistema
                                 </button>
                             </div>
                         </>
@@ -219,120 +240,83 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
         </div>
 
-        {/* --- 2. BOTTOM BAR (Main Navigation) --- */}
-        <div className={`${bottomBarClass} h-14 px-4 flex items-center justify-between shadow-inner transition-colors duration-500`}>
-            
-            {/* LEFT GROUP: New Case + Search */}
-            <div className="flex items-center gap-4 flex-shrink-0">
-                {/* NEW CASE BUTTON */}
+        {/* BOTTOM BAR */}
+        <div className={`${bottomBarClass} h-12 border-b border-slate-200/50 flex items-center justify-between px-4 lg:px-6 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] z-30 transition-colors duration-500`}>
+            <div className="w-48 flex-shrink-0">
                 <button 
-                    onClick={onNewCase}
-                    className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white text-blue-900 hover:bg-blue-50 rounded-md text-sm font-bold shadow-sm transition-all active:scale-95 border border-blue-100"
+                    onClick={onNewCase} 
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition-all active:scale-95 ${isBottomDark ? 'bg-white text-blue-900 hover:bg-blue-50' : 'bg-slate-900 text-white hover:bg-blue-600'}`}
                 >
-                    <Plus size={18} strokeWidth={3} />
-                    <span className="hidden md:inline">Novo Caso</span>
+                    <Plus size={14} strokeWidth={3} />
+                    <span>Novo Caso</span>
                 </button>
-
-                {/* SMART SEARCH TRIGGER */}
-                <button 
-                    onClick={onOpenCmdK}
-                    className="hidden xl:flex items-center gap-3 bg-black/20 border border-white/10 hover:bg-black/30 text-white/90 rounded-full pl-3 pr-4 py-1.5 w-64 transition-all group"
-                >
-                     <Search size={14} className="text-white/60 group-hover:text-white" />
-                     <span className="text-xs flex-1 text-left opacity-80">Buscar contatos, tarefas...</span>
-                </button>
-                
-                <div className="h-6 w-px bg-white/20 hidden md:block mx-1"></div>
             </div>
 
-            {/* MIDDLE GROUP: Views (Tabs) */}
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 px-4">
-                 {(Object.keys(VIEW_CONFIG) as ViewType[]).map((view) => {
-                    const config = VIEW_CONFIG[view];
-                    return (
-                        <NavItem 
-                            key={view}
-                            label={config.label}
-                            active={currentView === view}
-                            onClick={() => setCurrentView(view)}
-                        />
-                    );
-                })}
-            </div>
-
-            {/* RIGHT GROUP: Tools */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-                <div className="h-6 w-px bg-white/20 hidden md:block mx-1"></div>
-                <div className="flex items-center gap-1">
-                    <NavItem label="Dashboard" icon={BarChart2} onClick={onOpenDashboard} />
-                    <NavItem label="Clientes" icon={Users} onClick={onOpenClients} />
-                    <NavItem label="Agenda" icon={Calendar} onClick={onOpenCalendar} />
-                    <NavItem label="Tarefas" icon={CheckSquare} onClick={onOpenTasks} />
+            <div className="flex-1 flex justify-center h-full">
+                <div className="flex items-end gap-1 h-full overflow-x-auto no-scrollbar">
+                    {(Object.keys(VIEW_CONFIG) as ViewType[])
+                        .filter(v => v !== 'ARCHIVED')
+                        .map((view) => {
+                            const config = VIEW_CONFIG[view];
+                            return <NavItem key={view} label={config.label} active={currentView === view} onClick={() => setCurrentView(view)} />;
+                        })
+                    }
                 </div>
+            </div>
+
+            <div className="w-48 flex justify-end items-center gap-1 flex-shrink-0">
+                <NavItem iconOnly label="Arquivo" icon={Archive} active={currentView === 'ARCHIVED'} onClick={() => setCurrentView('ARCHIVED')} />
+                <div className={`h-4 w-px mx-1 bg-current opacity-20 ${isBottomDark ? 'text-white' : 'text-slate-400'}`}></div>
+                <NavItem iconOnly label="Dashboard" icon={BarChart2} onClick={onOpenDashboard} />
+                <NavItem iconOnly label="Clientes" icon={Users} onClick={onOpenClients} />
+                <NavItem iconOnly label="Agenda" icon={Calendar} onClick={onOpenCalendar} />
+                <NavItem iconOnly label="Tarefas" icon={CheckSquare} onClick={onOpenTasks} />
+                {canViewLogs && <NavItem iconOnly label="Logs" icon={FileCheck} onClick={onOpenLogs} />}
             </div>
         </div>
 
-        {/* --- 3. FILTER STRIP (Sub-header) --- */}
-        <div className="bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-4 text-xs shadow-sm z-30 overflow-x-auto">
-             <div className="flex items-center gap-2 text-slate-500 flex-shrink-0">
-                <Search size={14} />
-                <span className="font-bold uppercase text-[10px]">Filtros Rápidos:</span>
+        {/* FILTERS */}
+        <div className="bg-slate-50 border-b border-slate-200 px-4 lg:px-6 py-2 flex items-center gap-4 text-xs z-20 overflow-x-auto no-scrollbar shadow-inner">
+             <div className="flex items-center gap-2 text-slate-400 flex-shrink-0 font-bold uppercase tracking-wide text-[9px]">
+                 <Search size={12} /> Filtros Rápidos:
              </div>
              
-             {/* Responsible Filter */}
-             <div className="relative group flex-shrink-0">
-                 <select 
-                    value={responsibleFilter}
-                    onChange={(e) => setResponsibleFilter(e.target.value)}
-                    className="appearance-none bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-full px-3 py-1 pr-8 text-slate-600 font-medium outline-none cursor-pointer focus:ring-2 focus:ring-blue-100 transition-all"
-                 >
-                     <option value="">Todos os Responsáveis</option>
-                     {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                 </select>
-                 <ChevronDown size={12} className="absolute right-2.5 top-2 text-slate-400 pointer-events-none"/>
-             </div>
-
-             {/* Urgency Filter */}
-             <div className="relative group flex-shrink-0">
-                 <select 
-                    value={urgencyFilter}
-                    onChange={(e) => setUrgencyFilter(e.target.value)}
-                    className="appearance-none bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-full px-3 py-1 pr-8 text-slate-600 font-medium outline-none cursor-pointer focus:ring-2 focus:ring-blue-100 transition-all"
-                 >
-                     <option value="">Todas as Prioridades</option>
-                     <option value="NORMAL">Normal</option>
-                     <option value="HIGH">Alta</option>
-                     <option value="CRITICAL">Crítica</option>
-                 </select>
-                 <ChevronDown size={12} className="absolute right-2.5 top-2 text-slate-400 pointer-events-none"/>
-             </div>
-
-             {/* TAGS FILTER (New) */}
-             {setTagFilter && (
-                 <div className="relative group flex-shrink-0">
-                     <select 
-                        value={tagFilter || ''}
-                        onChange={(e) => setTagFilter(e.target.value)}
-                        className="appearance-none bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-full px-3 py-1 pr-8 text-slate-600 font-medium outline-none cursor-pointer focus:ring-2 focus:ring-blue-100 transition-all pl-7"
-                     >
-                         <option value="">Todas as Etiquetas</option>
-                         {SYSTEM_TAGS.map(t => (
-                             <option key={t.id} value={t.label}>{t.label}</option>
-                         ))}
+             <div className="flex gap-2">
+                 <div className="relative group">
+                     <select value={responsibleFilter} onChange={(e) => setResponsibleFilter(e.target.value)} className="appearance-none bg-white border border-slate-200 hover:border-blue-300 rounded-md px-3 py-1 pr-6 text-slate-600 text-[11px] font-medium outline-none cursor-pointer focus:ring-1 focus:ring-blue-200 transition-all shadow-sm">
+                         <option value="">Responsável (Todos)</option>
+                         {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                      </select>
-                     <Tag size={12} className="absolute left-2.5 top-2 text-slate-400 pointer-events-none"/>
-                     <ChevronDown size={12} className="absolute right-2.5 top-2 text-slate-400 pointer-events-none"/>
+                     <ChevronDown size={10} className="absolute right-2 top-2 text-slate-400 pointer-events-none"/>
                  </div>
-             )}
+
+                 <div className="relative group">
+                     <select value={urgencyFilter} onChange={(e) => setUrgencyFilter(e.target.value)} className="appearance-none bg-white border border-slate-200 hover:border-blue-300 rounded-md px-3 py-1 pr-6 text-slate-600 text-[11px] font-medium outline-none cursor-pointer focus:ring-1 focus:ring-blue-200 transition-all shadow-sm">
+                         <option value="">Prioridade (Todas)</option>
+                         <option value="NORMAL">Normal</option>
+                         <option value="HIGH">Alta</option>
+                         <option value="CRITICAL">Crítica</option>
+                     </select>
+                     <ChevronDown size={10} className="absolute right-2 top-2 text-slate-400 pointer-events-none"/>
+                 </div>
+
+                 {setTagFilter && (
+                     <div className="relative group">
+                         <select value={tagFilter || ''} onChange={(e) => setTagFilter(e.target.value)} className="appearance-none bg-white border border-slate-200 hover:border-blue-300 rounded-md px-3 py-1 pr-6 pl-7 text-slate-600 text-[11px] font-medium outline-none cursor-pointer focus:ring-1 focus:ring-blue-200 transition-all shadow-sm">
+                             <option value="">Etiquetas (Todas)</option>
+                             {SYSTEM_TAGS.map(t => <option key={t.id} value={t.label}>{t.label}</option>)}
+                         </select>
+                         <Tag size={10} className="absolute left-2 top-2 text-slate-400 pointer-events-none"/>
+                         <ChevronDown size={10} className="absolute right-2 top-2 text-slate-400 pointer-events-none"/>
+                     </div>
+                 )}
+             </div>
 
              <div className="flex-1"></div>
-
+             
              {(searchTerm || responsibleFilter || urgencyFilter || tagFilter) && (
-                 <button 
-                    onClick={() => { setSearchTerm(''); setResponsibleFilter(''); setUrgencyFilter(''); if(setTagFilter) setTagFilter(''); }}
-                    className="text-slate-400 hover:text-red-500 flex items-center gap-1 font-medium transition-colors flex-shrink-0"
-                 >
-                     <LogOut size={12} className="rotate-180"/> Limpar Filtros
+                 <button onClick={() => { setSearchTerm(''); setResponsibleFilter(''); setUrgencyFilter(''); if(setTagFilter) setTagFilter(''); }} className="text-slate-400 hover:text-red-500 flex items-center gap-1 font-bold transition-colors flex-shrink-0 text-[9px] uppercase tracking-wide px-2 py-1 rounded hover:bg-red-50">
+                     <LogOut size={10} className="rotate-180"/> Limpar
                  </button>
              )}
         </div>

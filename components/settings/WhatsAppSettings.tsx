@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Plus, Trash2, MessageCircle, Save, Sparkles, ChevronRight, HelpCircle, Copy } from 'lucide-react';
 import { WhatsAppTemplate, User, SystemLog } from '../../types';
 
@@ -13,6 +13,9 @@ interface WhatsAppSettingsProps {
 
 const WA_VARIABLES = [
     { key: '{NOME}', desc: 'Primeiro nome do cliente' },
+    { key: '{SAUDACAO}', desc: 'Sr. / Sra. (Automático)' },
+    { key: '{PREZADO}', desc: 'Prezado / Prezada (Automático)' },
+    { key: '{ARTIGO}', desc: 'o / a (Automático)' },
     { key: '{NB}', desc: 'Número do Benefício' },
     { key: '{PROTOCOLO}', desc: 'Protocolo INSS / Judicial' },
     { key: '{ID_INTERNO}', desc: 'Código do processo no escritório' },
@@ -27,6 +30,7 @@ export const WhatsAppSettings: React.FC<WhatsAppSettingsProps> = ({
 }) => {
   const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
   const [editForm, setEditForm] = useState<Partial<WhatsAppTemplate> | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSelect = (tpl: WhatsAppTemplate) => {
       setSelectedTemplate(tpl);
@@ -38,7 +42,7 @@ export const WhatsAppSettings: React.FC<WhatsAppSettingsProps> = ({
           id: `wa_tpl_${Date.now()}`,
           label: 'Novo Modelo',
           category: 'GERAL',
-          text: 'Olá {NOME}, ...'
+          text: 'Olá {SAUDACAO} {NOME}, ...'
       };
       setEditForm(newTpl);
       setSelectedTemplate(null);
@@ -80,21 +84,20 @@ export const WhatsAppSettings: React.FC<WhatsAppSettingsProps> = ({
   };
 
   const insertVariable = (variable: string) => {
-      if (!editForm) return;
-      const textArea = document.getElementById('wa-editor') as HTMLTextAreaElement;
-      if (textArea) {
-          const start = textArea.selectionStart;
-          const end = textArea.selectionEnd;
-          const text = editForm.text || '';
-          const newText = text.substring(0, start) + variable + text.substring(end);
-          setEditForm({ ...editForm, text: newText });
-          
-          // Restore focus after React render cycle
-          setTimeout(() => {
-              textArea.focus();
-              textArea.setSelectionRange(start + variable.length, start + variable.length);
-          }, 0);
-      }
+      if (!editForm || !editorRef.current) return;
+      
+      const textArea = editorRef.current;
+      const start = textArea.selectionStart;
+      const end = textArea.selectionEnd;
+      const text = editForm.text || '';
+      const newText = text.substring(0, start) + variable + text.substring(end);
+      setEditForm({ ...editForm, text: newText });
+      
+      // Restore focus after React render cycle
+      setTimeout(() => {
+          textArea.focus();
+          textArea.setSelectionRange(start + variable.length, start + variable.length);
+      }, 0);
   };
 
   return (
@@ -165,7 +168,7 @@ export const WhatsAppSettings: React.FC<WhatsAppSettingsProps> = ({
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Mensagem (Suporta formatação do WhatsApp)</label>
                             <div className="flex-1 relative">
                                 <textarea 
-                                    id="wa-editor"
+                                    ref={editorRef}
                                     className="w-full h-full p-4 border border-slate-300 rounded-xl resize-none text-sm leading-relaxed focus:ring-2 focus:ring-green-100 outline-none font-sans"
                                     value={editForm.text || ''}
                                     onChange={e => setEditForm({...editForm, text: e.target.value})}

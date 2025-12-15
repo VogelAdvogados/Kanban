@@ -11,6 +11,7 @@ interface AppContextType {
   openSmartAction: (c: Case, action: SmartAction) => void;
   openStickyNote: (c: Case, note?: StickyNote) => void;
   openQuickCheck: (c: Case) => void;
+  openDocumentGenerator: (c: Case) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);

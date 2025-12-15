@@ -1,24 +1,17 @@
 
 import React from 'react';
-import { Zap, Sliders, Users, AlertTriangle, Save, Bug, Clock } from 'lucide-react';
+import { Sliders, Users, Bug, Clock, Scale, Zap } from 'lucide-react';
 import { SystemSettings } from '../../types';
 
 interface AutomationSettingsProps {
   settings: SystemSettings;
   setSettings: (s: SystemSettings) => void;
-  onSave: () => void;
 }
 
-export const AutomationSettings: React.FC<AutomationSettingsProps> = ({ settings, setSettings, onSave }) => {
+export const AutomationSettings: React.FC<AutomationSettingsProps> = ({ settings, setSettings }) => {
   return (
-    <div className="space-y-6 animate-in slide-in-from-right-4">
-        <div className="pb-4 border-b border-slate-100">
-             <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                <Zap className="text-yellow-500" size={20}/> Prazos e Automação 360º
-             </h3>
-             <p className="text-xs text-slate-500">Defina as regras de negócio para monitoramento de saúde dos processos.</p>
-        </div>
-
+    <div className="space-y-6">
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* SLA Interno */}
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
@@ -66,10 +59,33 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({ settings
                 </div>
             </div>
 
+            {/* Prazos Legais (NEW) */}
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                <h4 className="font-bold text-slate-700 mb-4 text-sm flex items-center gap-2">
+                    <Scale size={16} className="text-red-600"/> Prazos Legais (Mandado de Segurança)
+                </h4>
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Limite para Impetração de MS</label>
+                    <p className="text-[10px] text-slate-400 mb-2">
+                        Após quantos dias de "silêncio administrativo" o sistema deve sugerir Mandado de Segurança? (Padrão: 90 ou 120)
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            min="30"
+                            className="w-20 p-2 rounded border border-slate-300 text-sm font-bold text-center text-red-600"
+                            value={settings.sla_mandado_seguranca || 120}
+                            onChange={e => setSettings({...settings, sla_mandado_seguranca: parseInt(e.target.value) || 120})}
+                        />
+                        <span className="text-sm text-slate-600">dias corridos</span>
+                    </div>
+                </div>
+            </div>
+
             {/* Auditoria & Teia de Aranha */}
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <h4 className="font-bold text-slate-700 mb-4 text-sm flex items-center gap-2">
-                    <Bug size={16} className="text-red-500"/> "Teia de Aranha" (Auditoria)
+                    <Bug size={16} className="text-orange-500"/> "Teia de Aranha" (Auditoria)
                 </h4>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Limite Sem Consulta Manual</label>
@@ -80,7 +96,7 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({ settings
                         <input 
                             type="number" 
                             min="15"
-                            className="w-20 p-2 rounded border border-slate-300 text-sm font-bold text-center text-red-600"
+                            className="w-20 p-2 rounded border border-slate-300 text-sm font-bold text-center text-orange-600"
                             value={settings.sla_spider_web || 45}
                             onChange={e => setSettings({...settings, sla_spider_web: parseInt(e.target.value) || 45})}
                         />
@@ -114,7 +130,7 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({ settings
             </div>
 
             {/* IA & Analytics */}
-            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 md:col-span-2">
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <h4 className="font-bold text-slate-700 mb-4 text-sm flex items-center gap-2">
                     <Zap size={16} /> Inteligência Preditiva
                 </h4>
@@ -132,15 +148,6 @@ export const AutomationSettings: React.FC<AutomationSettingsProps> = ({ settings
                 </div>
                 <p className="text-[10px] text-slate-400 mt-2 ml-8">Calcula automaticamente a chance de vitória com base no tipo de benefício e idade.</p>
             </div>
-        </div>
-
-        <div className="pt-4 border-t border-slate-100 flex justify-end">
-            <button 
-                onClick={onSave}
-                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md flex items-center gap-2"
-            >
-                <Save size={16}/> Salvar Configurações
-            </button>
         </div>
     </div>
   );

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Users } from 'lucide-react';
-import { Case } from '../types';
+import { Case, User } from '../types';
 import { ClientGroup, ClientList } from './clients/ClientList';
 import { ClientDetails } from './clients/ClientDetails';
 
@@ -11,9 +11,11 @@ interface ClientsModalProps {
   onSelectCase: (c: Case) => void;
   onNewCase: () => void;
   onUpdateClient: (cpf: string, data: Partial<Case>) => void;
+  updateCase?: (updatedCase: Case, logMessage?: string, userName?: string) => Promise<boolean>;
+  currentUser: User;
 }
 
-export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSelectCase, onNewCase, onUpdateClient }) => {
+export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSelectCase, onNewCase, onUpdateClient, updateCase, currentUser }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientKey, setSelectedClientKey] = useState<string | null>(null);
 
@@ -71,7 +73,10 @@ export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSe
         }
     }
 
-    return Array.from(clientMap.values()).sort((a, b) => b.lastContactDate.localeCompare(a.lastContactDate));
+    // SORT BY NEWEST ADDED (Creation Date of latest case)
+    return Array.from(clientMap.values()).sort((a, b) => 
+        new Date(b.latestCase.createdAt).getTime() - new Date(a.latestCase.createdAt).getTime()
+    );
   }, [cases]); // Only re-run if cases array reference changes
 
   // 2. Filter Clients
@@ -120,6 +125,8 @@ export const ClientsModal: React.FC<ClientsModalProps> = ({ cases, onClose, onSe
                         onClose={() => setSelectedClientKey(null)}
                         onUpdateClient={onUpdateClient}
                         onSelectCase={onSelectCase}
+                        updateCase={updateCase}
+                        currentUser={currentUser}
                     />
                 ) : (
                     // Empty State

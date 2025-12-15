@@ -3,6 +3,7 @@ import React, { useRef } from 'react';
 import { Download, FileText, Upload, AlertTriangle, Info } from 'lucide-react';
 import { exportToCSV } from '../../utils';
 import { Case, User, DocumentTemplate, SystemTag, OfficeData, SystemSettings } from '../../types';
+import { db } from '../../services/database';
 
 interface BackupSettingsProps {
   allCases: Case[];
@@ -32,7 +33,7 @@ export const BackupSettings: React.FC<BackupSettingsProps> = ({
 
   const handleExportJSON = () => {
       const systemBackup = {
-          version: '2.1',
+          version: '4.4', // Updated to 4.4 Stable
           timestamp: new Date().toISOString(),
           officeData: officeData,
           settings: systemSettings,
@@ -50,14 +51,14 @@ export const BackupSettings: React.FC<BackupSettingsProps> = ({
       
       const downloadAnchorNode = document.createElement('a');
       downloadAnchorNode.setAttribute("href", url);
-      downloadAnchorNode.setAttribute("download", `rambo_prev_FULL_BACKUP_${new Date().toISOString().slice(0,10)}.json`);
+      downloadAnchorNode.setAttribute("download", `rambo_prev_v4.4_BACKUP_${new Date().toISOString().slice(0,10)}.json`);
       document.body.appendChild(downloadAnchorNode);
       downloadAnchorNode.click();
       document.body.removeChild(downloadAnchorNode);
       URL.revokeObjectURL(url); // Clean up memory
 
       if (addSystemLog && currentUser) {
-          addSystemLog('Backup Completo', 'Download de backup completo do sistema realizado.', currentUser.name, 'SECURITY');
+          addSystemLog('Backup Completo', 'Download de backup completo do sistema (v4.4) realizado.', currentUser.name, 'SECURITY');
       }
       showToast('Backup gerado com sucesso!', 'success');
   };
@@ -81,16 +82,33 @@ export const BackupSettings: React.FC<BackupSettingsProps> = ({
               if (json.version && json.data) {
                   if (!Array.isArray(json.data.cases)) throw new Error("Formato de casos inválido");
 
-                  if (confirm(`Backup encontrado de: ${new Date(json.timestamp).toLocaleString()}.\nDeseja restaurar TUDO (Casos, Usuários e Modelos)?`)) {
+                  if (confirm(`Backup encontrado (v${json.version}) de: ${new Date(json.timestamp).toLocaleString()}.\nDeseja restaurar TUDO (Casos, Usuários e Modelos)?`)) {
                       onImportData(json.data.cases || []);
-                      if (Array.isArray(json.data.users)) setUsers(json.data.users);
-                      if (Array.isArray(json.data.templates)) setDocumentTemplates(json.data.templates);
-                      if (Array.isArray(json.data.tags)) setSystemTags(json.data.tags);
-                      if (json.officeData) setOfficeData(json.officeData);
-                      if (json.settings) setSystemSettings(json.settings);
+                      
+                      // Critical Fix: Persist non-case data to DB immediately
+                      if (Array.isArray(json.data.users)) {
+                          setUsers(json.data.users);
+                          db.saveUsers(json.data.users);
+                      }
+                      if (Array.isArray(json.data.templates)) {
+                          setDocumentTemplates(json.data.templates);
+                          db.saveTemplates(json.data.templates);
+                      }
+                      if (Array.isArray(json.data.tags)) {
+                          setSystemTags(json.data.tags);
+                          db.saveTags(json.data.tags);
+                      }
+                      if (json.officeData) {
+                          setOfficeData(json.officeData);
+                          db.saveOfficeData(json.officeData);
+                      }
+                      if (json.settings) {
+                          setSystemSettings(json.settings);
+                          db.saveSystemSettings(json.settings);
+                      }
                       
                       if (addSystemLog && currentUser) {
-                          addSystemLog('Restauração de Backup', 'Backup completo restaurado.', currentUser.name, 'SECURITY');
+                          addSystemLog('Restauração de Backup', `Backup v${json.version} restaurado.`, currentUser.name, 'SECURITY');
                       }
                       
                       showToast('Sistema restaurado completamente!', 'success');

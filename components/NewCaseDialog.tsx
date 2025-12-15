@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { UserPlus, Search, AlertCircle, Check, XCircle } from 'lucide-react';
 import { Case } from '../types';
@@ -96,7 +97,8 @@ export const NewCaseDialog: React.FC<NewCaseDialogProps> = ({ cases, onClose, on
                                         clientName: existingCase.clientName,
                                         phone: existingCase.phone,
                                         birthDate: existingCase.birthDate,
-                                        govPassword: existingCase.govPassword
+                                        govPassword: existingCase.govPassword,
+                                        sex: existingCase.sex // Import Sex
                                     })}
                                     className="bg-blue-600 text-white text-xs font-bold px-3 py-2 rounded flex items-center gap-1 hover:bg-blue-700"
                                 >

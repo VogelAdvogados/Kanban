@@ -1,55 +1,131 @@
 
-import React from 'react';
-import { CheckSquare, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckSquare, AlertCircle, Calendar, Calculator, ListChecks, Plus } from 'lucide-react';
 import { COMMON_DOCUMENTS } from '../../constants';
+import { parseLocalYMD, getLocalDateISOString } from '../../utils';
+
+// --- DEADLINE FORM ---
 
 interface DeadlineFormProps {
   data: any;
   onChange: (data: any) => void;
 }
 
+const COMMON_EXIGENCIES = [
+    "Apresentar PPP Original",
+    "Laudo Técnico (LTCAT)",
+    "Carteira de Trabalho (CTPS) Original",
+    "Declaração de Sindicato Rural",
+    "Comprovante de Endereço Atualizado",
+    "Autodeclaração Rural",
+    "Documentos dos Dependentes"
+];
+
 export const DeadlineForm: React.FC<DeadlineFormProps> = ({ data, onChange }) => {
+  const [cienciaDate, setCienciaDate] = useState(data.deadlineStart || getLocalDateISOString());
+  const [daysToComply, setDaysToComply] = useState<number>(30); // Padrão 30 dias
+
+  // Calculadora Automática de Prazos
+  useEffect(() => {
+      if (cienciaDate && daysToComply) {
+          const start = parseLocalYMD(cienciaDate);
+          if (start) {
+              const end = new Date(start);
+              end.setDate(end.getDate() + daysToComply);
+              
+              onChange({ 
+                  deadlineStart: cienciaDate,
+                  deadlineEnd: end.toISOString().slice(0, 10)
+              });
+          }
+      }
+  }, [cienciaDate, daysToComply]);
+
+  const toggleExigencyItem = (item: string) => {
+      const currentText = data.exigencyDetails || '';
+      let newText = currentText;
+
+      if (currentText.includes(item)) {
+          newText = currentText.replace(`- ${item}\n`, '').replace(`- ${item}`, '');
+      } else {
+          newText = currentText ? `${currentText}\n- ${item}` : `- ${item}`;
+      }
+      onChange({ exigencyDetails: newText.trim() });
+  };
+
   return (
-    <div className="space-y-4">
-        {/* Detalhes da Exigência - Novo Campo */}
-        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-            <label className="block text-[10px] font-bold text-yellow-800 uppercase mb-1 flex items-center gap-1">
-                <AlertCircle size={12}/> O que o INSS pediu?
-            </label>
-            <textarea
-                className="w-full text-xs p-2 rounded border border-yellow-300 outline-none focus:ring-2 focus:ring-yellow-400 bg-white"
-                rows={3}
-                placeholder="Ex: Atualizar PPP da empresa X, apresentar LTCAT original, retificar CNIS..."
-                value={data.exigencyDetails || ''}
-                onChange={e => onChange({ exigencyDetails: e.target.value })}
-                autoFocus
-            />
+    <div className="space-y-5 animate-in slide-in-from-right-4">
+        {/* CALCULADORA DE PRAZOS (Módulo 2) */}
+        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <h4 className="text-xs font-bold text-yellow-800 uppercase mb-3 flex items-center gap-2">
+                <Calculator size={14}/> Calculadora de Prazo Fatal
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-[10px] font-bold text-yellow-700 uppercase mb-1">Data da Ciência</label>
+                    <input 
+                        type="date" 
+                        className="w-full border-yellow-300 rounded text-sm focus:ring-yellow-500 focus:border-yellow-500 bg-white"
+                        value={cienciaDate}
+                        onChange={e => setCienciaDate(e.target.value)}
+                    />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-yellow-700 uppercase mb-1">Prazo (Dias)</label>
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            className="w-full border-yellow-300 rounded text-sm focus:ring-yellow-500 focus:border-yellow-500 bg-white"
+                            value={daysToComply}
+                            onChange={e => setDaysToComply(parseInt(e.target.value))}
+                        />
+                        <span className="text-xs text-yellow-600 font-bold">Dias</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="mt-3 pt-3 border-t border-yellow-200 flex justify-between items-center">
+                <span className="text-xs text-yellow-700">Vencimento Calculado:</span>
+                <span className="text-sm font-bold text-red-600 bg-white px-2 py-1 rounded border border-red-200">
+                    {data.deadlineEnd ? new Date(data.deadlineEnd).toLocaleDateString('pt-BR') : '...'}
+                </span>
+            </div>
         </div>
 
-        {/* Datas */}
-        <div className="grid grid-cols-2 gap-3">
-            <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data da Ciência</label>
-                <input 
-                type="date" 
-                className="w-full border-slate-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
-                value={data.deadlineStart}
-                onChange={e => onChange({ deadlineStart: e.target.value })}
-                />
+        {/* DETALHAMENTO DA EXIGÊNCIA (Checklist) */}
+        <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                <ListChecks size={12}/> O que o INSS solicitou?
+            </label>
+            
+            {/* Chips de Sugestão */}
+            <div className="flex flex-wrap gap-2 mb-3">
+                {COMMON_EXIGENCIES.map(item => {
+                    const isSelected = (data.exigencyDetails || '').includes(item);
+                    return (
+                        <button
+                            key={item}
+                            onClick={() => toggleExigencyItem(item)}
+                            className={`text-[10px] px-2 py-1 rounded-full border transition-all ${isSelected ? 'bg-blue-100 text-blue-700 border-blue-300 font-bold' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}
+                        >
+                            {isSelected ? '✓ ' : '+ '} {item}
+                        </button>
+                    )
+                })}
             </div>
-            <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Prazo Final (Cumprimento)</label>
-                <input 
-                type="date" 
-                className="w-full border-red-300 rounded text-sm focus:ring-red-500 focus:border-red-500"
-                value={data.deadlineEnd}
-                onChange={e => onChange({ deadlineEnd: e.target.value })}
-                />
-            </div>
+
+            <textarea
+                className="w-full text-xs p-3 rounded-lg border border-slate-300 outline-none focus:ring-2 focus:ring-blue-100 bg-white min-h-[80px]"
+                placeholder="Descreva os detalhes da exigência ou use os botões acima..."
+                value={data.exigencyDetails || ''}
+                onChange={e => onChange({ exigencyDetails: e.target.value })}
+            />
         </div>
     </div>
   );
 };
+
+// --- PENDENCY FORM ---
 
 interface PendencyFormProps {
   data: any;
@@ -58,7 +134,7 @@ interface PendencyFormProps {
 }
 
 export const PendencyForm: React.FC<PendencyFormProps> = ({ data, onChange, commonDocs }) => {
-  
+  const [customDoc, setCustomDoc] = useState('');
   const availableDocs = commonDocs && commonDocs.length > 0 ? commonDocs : COMMON_DOCUMENTS;
 
   const toggleDoc = (doc: string) => {
@@ -68,6 +144,14 @@ export const PendencyForm: React.FC<PendencyFormProps> = ({ data, onChange, comm
     } else {
       onChange({ missingDocs: [...current, doc] });
     }
+  };
+
+  const handleAddCustom = () => {
+      const val = customDoc.trim();
+      if(val) {
+          toggleDoc(val);
+          setCustomDoc('');
+      }
   };
 
   return (
@@ -89,22 +173,43 @@ export const PendencyForm: React.FC<PendencyFormProps> = ({ data, onChange, comm
             </button>
           );
         })}
+        {/* Render existing custom docs that aren't in common list */}
+        {(data.missingDocs || []).map((doc: string) => {
+            if (!availableDocs.includes(doc)) {
+                return (
+                    <button 
+                      key={doc}
+                      onClick={() => toggleDoc(doc)}
+                      className={`text-xs text-left px-3 py-2 rounded-lg border transition-all flex items-center gap-2 bg-red-50 border-red-300 text-red-800 font-bold`}
+                    >
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 bg-red-500 border-red-500`}>
+                        <CheckSquare size={10} className="text-white"/>
+                      </div>
+                      <span className="truncate">{doc} (Outro)</span>
+                    </button>
+                );
+            }
+            return null;
+        })}
       </div>
-      <div className="pt-2">
+      <div className="pt-2 flex gap-2">
         <input 
           type="text" 
-          placeholder="Outros (digite e pressione Enter)..."
-          className="w-full text-xs p-2 border border-slate-300 rounded"
+          placeholder="Outros (digite e adicione)..."
+          className="flex-1 text-xs p-2 border border-slate-300 rounded outline-none focus:border-red-300"
+          value={customDoc}
+          onChange={(e) => setCustomDoc(e.target.value)}
           onKeyDown={(e) => {
-            if(e.key === 'Enter') {
-              const val = e.currentTarget.value.trim();
-              if(val) {
-                toggleDoc(val);
-                e.currentTarget.value = '';
-              }
-            }
+            if(e.key === 'Enter') handleAddCustom();
           }}
         />
+        <button 
+            onClick={handleAddCustom}
+            disabled={!customDoc.trim()}
+            className="bg-red-500 text-white p-2 rounded hover:bg-red-600 disabled:opacity-50 transition-colors"
+        >
+            <Plus size={16} />
+        </button>
       </div>
     </div>
   );

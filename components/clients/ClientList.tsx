@@ -1,6 +1,8 @@
+
 import React from 'react';
 import { Search, Users, Plus, X } from 'lucide-react';
 import { Case } from '../../types';
+import { getClientAvatarColor } from '../../utils';
 
 export interface ClientGroup {
     key: string; 
@@ -31,6 +33,14 @@ interface ClientListProps {
 export const ClientList: React.FC<ClientListProps> = ({ 
     clients, searchTerm, onSearchChange, selectedClientKey, onSelectClient, onNewCase, onClose
 }) => {
+    
+    // Consistent initial generator
+    const getInitials = (name: string) => {
+        const parts = name.trim().split(' ');
+        if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    };
+
     return (
         <div className={`
             flex-col bg-white h-full border-r border-slate-200 z-10 
@@ -68,6 +78,20 @@ export const ClientList: React.FC<ClientListProps> = ({
                 ) : (
                     clients.map(client => {
                         const isSelected = selectedClientKey === client.key;
+                        const avatarColorClass = isSelected 
+                            ? 'bg-blue-500 text-white border-blue-500' // Selected state overrides color
+                            : `${getClientAvatarColor(client.latestCase.sex).replace('shadow-', '')} text-white border-transparent`; // Use gender color when not selected (simplified)
+
+                        // Simplified color logic for list items
+                        let listAvatarClass = 'bg-slate-100 text-slate-500 border-slate-200';
+                        if (isSelected) {
+                            listAvatarClass = 'bg-blue-500 text-white border-blue-500';
+                        } else if (client.latestCase.sex === 'FEMALE') {
+                            listAvatarClass = 'bg-pink-100 text-pink-600 border-pink-200';
+                        } else if (client.latestCase.sex === 'MALE') {
+                            listAvatarClass = 'bg-blue-100 text-blue-600 border-blue-200';
+                        }
+
                         return (
                             <div 
                                 key={client.key}
@@ -76,8 +100,8 @@ export const ClientList: React.FC<ClientListProps> = ({
                             >
                                 {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>}
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors flex-shrink-0 ${isSelected ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-100 text-slate-500 border-slate-200 group-hover:border-blue-200'}`}>
-                                        {client.name.substring(0,2).toUpperCase()}
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors flex-shrink-0 ${listAvatarClass}`}>
+                                        {getInitials(client.name)}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className={`text-sm font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>{client.name}</h4>

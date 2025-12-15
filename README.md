@@ -55,40 +55,33 @@ O sistema foi projetado para aumentar a produtividade e a organização do escri
 ```
 /
 ├── components/          # Componentes da UI
-│   ├── kanban/          # Colunas e lógica do board
-│   ├── case-modal/      # Modal de detalhes do processo (Ficha, Arquivos, Histórico)
-│   ├── settings/        # Gerenciador de Modelos e Configurações
-│   ├── transitions/     # Formulários de transição de fase
-│   ├── clients/         # Lista e detalhes de clientes
-│   └── ...              # Dashboard, Header, DocumentGenerator, etc.
 ├── hooks/               # Custom Hooks (useKanban, useIsMobile)
 ├── types.ts             # Definições de Tipos TypeScript
 ├── constants.ts         # Configurações estáticas (Cores, Regras, Modelos Padrão)
 ├── utils.ts             # Funções auxiliares (Datas, Validação CPF, Exportação)
 ├── App.tsx              # Componente Raiz e Roteamento Lógico
-└── index.tsx            # Ponto de entrada
+├── index.tsx            # Ponto de entrada
+├── Dockerfile           # Configuração de Build para Container
+└── nginx.conf           # Configuração do Servidor Web para Produção
 ```
 
-## 🚀 Como Executar
+## ☁️ Deploy no Google Cloud Run
 
-1.  Certifique-se de ter o **Node.js** instalado.
-2.  Instale as dependências:
-    ```bash
-    npm install
-    ```
-3.  Inicie o servidor de desenvolvimento:
-    ```bash
-    npm run dev
-    ```
-4.  O sistema estará acessível em `http://localhost:5173` (ou porta similar).
+O projeto está configurado para deploy via container Docker.
 
-## 💾 Backup e Dados
+### Pré-requisitos
+1.  Conta no Google Cloud Platform.
+2.  Projeto criado e Cloud Run habilitado.
 
-O sistema utiliza o armazenamento local do navegador. Para garantir a segurança dos dados:
-1.  Vá em **Configurações > Dados & Backup**.
-2.  Clique em **"Baixar Backup Completo (.JSON)"**.
-3.  Salve o arquivo gerado em um local seguro (nuvem ou HD externo).
-4.  Para restaurar, utilize a opção "Restaurar Dados" na mesma tela.
+### Passos Automáticos (AI Studio)
+1.  Clique no botão **"Deploy App"**.
+2.  Selecione seu projeto do Google Cloud.
+3.  Aguarde a construção e implantação do container.
+
+### Como funciona o Deploy?
+O `Dockerfile` executa um processo em dois estágios:
+1.  **Build**: Compila o código React/TypeScript usando Node.js, gerando arquivos estáticos otimizados na pasta `dist`.
+2.  **Serve**: Copia os arquivos estáticos para um servidor Nginx leve, configurado via `nginx.conf` para lidar com rotas de Single Page Application (SPA) e escutar na porta 8080 (padrão do Cloud Run).
 
 ---
 

@@ -47,7 +47,11 @@ export const WorkflowSettings: React.FC<WorkflowSettingsProps> = ({ rules, setRu
           trigger: template.trigger,
           targetColumnId: template.targetColumnId,
           conditions: template.conditions || [],
-          actions: template.actions || []
+          // FIX: Generate unique IDs for actions from template to avoid key collisions
+          actions: (template.actions || []).map((act: any) => ({
+              ...act,
+              id: `wa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }))
       };
       setRules([...rules, newRule]);
       showToast(`Robô "${template.name}" instalado e rodando!`, 'success');

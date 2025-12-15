@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Calendar, Hash, ArrowUpCircle, TrendingUp, HelpCircle, MapPin, AlertCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { db } from '../../services/database';
 import { INSSAgency, Case } from '../../types';
-import { DEFAULT_INSS_AGENCIES } from '../../constants';
+import { DEFAULT_INSS_AGENCIES, JUDICIAL_COURTS } from '../../constants';
 import { getAgencyStats } from '../../utils'; // Import Algorithm
 
 interface ProtocolFormProps {
@@ -15,16 +15,27 @@ interface ProtocolFormProps {
   allCases?: Case[]; // Need historical data for analytics
 }
 
+// Helper safely parses ISO date string to YYYY-MM-DD for input[type="date"]
+const toInputDate = (isoStr: string | undefined): string => {
+    if (!isoStr) return '';
+    if (isoStr.length === 10) return isoStr;
+    return isoStr.split('T')[0];
+};
+
 export const ProtocolForm: React.FC<ProtocolFormProps> = ({ type, data, onChange, targetColumnId, agencies, allCases = [] }) => {
   
-  const [localAgencies, setLocalAgencies] = useState<INSSAgency[]>(agencies || DEFAULT_INSS_AGENCIES);
+  const [localAgencies, setLocalAgencies] = useState<INSSAgency[]>([]);
 
   useEffect(() => {
-      // Use provided agencies (which might be Courts now) or fallback to DB
+      // Use provided agencies (unified list) or fallback to DB/Constants merged
       if (agencies && agencies.length > 0) {
           setLocalAgencies(agencies);
       } else {
-          db.getAgencies().then(setLocalAgencies);
+          // If no props, fetch from DB or default to merged list
+          db.getAgencies().then(list => {
+              if (list.length > 0) setLocalAgencies(list);
+              else setLocalAgencies([...DEFAULT_INSS_AGENCIES, ...JUDICIAL_COURTS]);
+          });
       }
   }, [agencies]);
 
@@ -110,7 +121,7 @@ export const ProtocolForm: React.FC<ProtocolFormProps> = ({ type, data, onChange
                 <input 
                     type="date" 
                     className="w-full border-blue-200 rounded text-sm focus:ring-blue-500 focus:border-blue-500 py-2 outline-none"
-                    value={data.protocolDate || ''}
+                    value={toInputDate(data.protocolDate)}
                     onChange={e => onChange({ protocolDate: e.target.value })}
                 />
                 </div>
@@ -198,7 +209,7 @@ export const ProtocolForm: React.FC<ProtocolFormProps> = ({ type, data, onChange
                         <input 
                             type="date" 
                             className="w-full border-indigo-200 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500 py-2 outline-none"
-                            value={data.appealOrdinarioDate || ''}
+                            value={toInputDate(data.appealOrdinarioDate)}
                             onChange={e => onChange({ appealOrdinarioDate: e.target.value })}
                         />
                     </div>
@@ -233,7 +244,7 @@ export const ProtocolForm: React.FC<ProtocolFormProps> = ({ type, data, onChange
                       <input 
                           type="date" 
                           className="w-full border-purple-200 rounded text-sm focus:ring-purple-500 focus:border-purple-500 py-2 outline-none"
-                          value={data.appealEspecialDate || ''}
+                          value={toInputDate(data.appealEspecialDate)}
                           onChange={e => onChange({ appealEspecialDate: e.target.value })}
                       />
                   </div>

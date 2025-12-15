@@ -1,14 +1,15 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileText, Calendar, Award, ArrowRight, AlertTriangle, Clock, User, CornerUpLeft, BarChart2 } from 'lucide-react';
+import { FileText, Calendar, Award, ArrowRight, AlertTriangle, Clock, User, CornerUpLeft, BarChart2, GitBranch, Palmtree } from 'lucide-react';
 import { TransitionType, User as UserType, Case, INSSAgency } from '../types';
 import { ProtocolForm } from './transitions/ProtocolForm';
 import { ConclusionForm } from './transitions/ConclusionForm';
 import { DeadlineForm, PendencyForm } from './transitions/TaskForms';
 import { AppealReturnForm } from './transitions/AppealReturnForm';
-import { recommendResponsible } from '../utils'; // IMPORT NEW ALGORITHM
+import { AdminReturnForm } from './transitions/AdminReturnForm'; 
+import { recommendResponsible, getLocalDateISOString, parseLocalYMD } from '../utils'; 
 import { db } from '../services/database';
-import { JUDICIAL_COURTS, DEFAULT_INSS_AGENCIES } from '../constants'; // Import Courts
+import { JUDICIAL_COURTS, DEFAULT_INSS_AGENCIES } from '../constants'; 
 
 interface TransitionModalProps {
   type: TransitionType;
@@ -28,42 +29,70 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
     type, data, caseContext, currentResponsibleId, users, targetColumnId, setData, onConfirm, onCancel, commonDocs, agencies
 }) => {
   
-  // Suggested user based on load
   const [suggestedUserId, setSuggestedUserId] = useState<string>('');
   const [allCasesForLoad, setAllCasesForLoad] = useState<Case[]>([]);
+  const [vacationAlert, setVacationAlert] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch cases for load balancing calculation
     db.getCases().then(c => {
         setAllCasesForLoad(c);
         const bestUser = recommendResponsible(users, c);
         setSuggestedUserId(bestUser);
         
-        // Initialize default data
         const updates: any = {};
-        if(!data.newResponsibleId) updates.newResponsibleId = bestUser || currentResponsibleId; // Smart Default
-        if(!data.missingDocs && type === 'PENDENCY') updates.missingDocs = [];
+        if(!data.newResponsibleId) updates.newResponsibleId = bestUser || currentResponsibleId; 
+        
+        if (type === 'PENDENCY') {
+            if (caseContext && caseContext.missingDocs && caseContext.missingDocs.length > 0) {
+                updates.missingDocs = [...caseContext.missingDocs];
+            } else if (!data.missingDocs) {
+                updates.missingDocs = [];
+            }
+        }
+
         if (!data.benefitDate && type === 'CONCLUSION_NB') {
-            updates.benefitDate = new Date().toISOString().slice(0, 10);
+            updates.benefitDate = getLocalDateISOString(); 
         }
         if (type === 'APPEAL_RETURN') {
             if (data.createSpecialTask === undefined) updates.createSpecialTask = true;
             if (!data.appealOutcome) updates.appealOutcome = 'IMPROVIDO'; 
         }
+        if (!data.protocolDate) updates.protocolDate = getLocalDateISOString();
+        if (!data.deadlineStart) updates.deadlineStart = getLocalDateISOString();
+
         if (Object.keys(updates).length > 0) {
             setData({ ...data, ...updates });
         }
     });
   }, []); 
 
+  // Vacation Guard Logic
+  useEffect(() => {
+      if (data.newResponsibleId) {
+          const selectedUser = users.find(u => u.id === data.newResponsibleId);
+          if (selectedUser && selectedUser.vacation && selectedUser.vacation.start && selectedUser.vacation.end) {
+              const today = new Date();
+              today.setHours(0,0,0,0);
+              const start = parseLocalYMD(selectedUser.vacation.start);
+              const end = parseLocalYMD(selectedUser.vacation.end);
+
+              if (start && end && today >= start && today <= end) {
+                  setVacationAlert(`⚠️ ${selectedUser.name} está de FÉRIAS até ${end.toLocaleDateString()}.`);
+              } else {
+                  setVacationAlert(null);
+              }
+          } else {
+              setVacationAlert(null);
+          }
+      }
+  }, [data.newResponsibleId, users]);
+
   const handleDataChange = (updates: any) => {
       setData({ ...data, ...updates });
   };
 
-  // Determine correct location list (INSS Agencies vs Judicial Courts)
   const activeLocations = targetColumnId === 'jud_pericia' ? JUDICIAL_COURTS : (agencies || DEFAULT_INSS_AGENCIES);
 
-  // Visual Config
   let title = 'Dados da Transição';
   let Icon = FileText;
   let color = 'text-blue-500';
@@ -128,6 +157,12 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
           color = 'text-orange-600';
           description = 'O recurso voltou da Junta. Registre o resultado.';
           break;
+      case 'ADMIN_RETURN':
+          title = 'Retorno ao Administrativo';
+          Icon = GitBranch;
+          color = 'text-blue-600';
+          description = 'Decida como este processo deve voltar ao início.';
+          break;
   }
 
   const validateAndConfirm = () => {
@@ -140,12 +175,16 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
         if (!data.appealDecisionDate) { alert("Data da decisão é obrigatória."); return; }
         if (!data.appealOutcome) { alert("Selecione o resultado."); return; }
     }
+    if (type === 'ADMIN_RETURN') {
+        if (!data.returnMode) { alert("Selecione uma opção de retorno (Novo Requerimento ou Mover)."); return; }
+        if (data.returnMode === 'CLONE' && !data.protocolNumber) { alert("Informe o novo protocolo."); return; }
+    }
     onConfirm();
   };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className={`bg-white rounded-xl shadow-2xl w-full ${type === 'PENDENCY' || type === 'CONCLUSION_NB' ? 'max-w-md' : 'max-w-sm'} p-6 animate-in zoom-in duration-200 border border-slate-200`}>
+        <div className={`bg-white rounded-xl shadow-2xl w-full ${type === 'PENDENCY' || type === 'CONCLUSION_NB' || type === 'ADMIN_RETURN' ? 'max-w-md' : 'max-w-sm'} p-6 animate-in zoom-in duration-200 border border-slate-200`}>
             
             <div className="flex items-center gap-3 mb-2">
                 <div className={`p-2 rounded-lg bg-slate-50 border border-slate-100`}>
@@ -164,7 +203,7 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                         data={data} 
                         onChange={handleDataChange} 
                         targetColumnId={targetColumnId} 
-                        agencies={activeLocations} // Pass correct list (INSS vs Courts)
+                        agencies={activeLocations} 
                         allCases={allCasesForLoad} 
                     />
                 )}
@@ -185,13 +224,18 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                     <AppealReturnForm data={data} onChange={handleDataChange} />
                 )}
 
-                {/* Handover Section with Smart Recommendation */}
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mt-4">
+                {/* NEW FORM FOR ADMIN RETURN */}
+                {type === 'ADMIN_RETURN' && (
+                    <AdminReturnForm data={data} onChange={handleDataChange} />
+                )}
+
+                {/* Handover Section */}
+                <div className={`p-3 rounded-lg border mt-4 transition-colors ${vacationAlert ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                     <div className="flex justify-between items-center mb-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                        <label className={`text-[10px] font-bold uppercase flex items-center gap-1 ${vacationAlert ? 'text-red-600' : 'text-slate-500'}`}>
                             <User size={12}/> Responsável Próxima Etapa
                         </label>
-                        {suggestedUserId && (
+                        {suggestedUserId && !vacationAlert && (
                             <span className="text-[9px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 flex items-center gap-1">
                                 <BarChart2 size={10}/> Sugestão: {users.find(u => u.id === suggestedUserId)?.name.split(' ')[0]}
                             </span>
@@ -200,7 +244,7 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                     <select 
                         value={data.newResponsibleId} 
                         onChange={(e) => handleDataChange({ newResponsibleId: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-md text-sm p-2 font-medium focus:ring-2 focus:ring-blue-200 outline-none"
+                        className={`w-full border rounded-md text-sm p-2 font-medium focus:ring-2 outline-none ${vacationAlert ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-200' : 'border-slate-300 bg-white focus:ring-blue-200'}`}
                     >
                         {users.map(u => (
                             <option key={u.id} value={u.id}>
@@ -208,6 +252,11 @@ export const TransitionModal: React.FC<TransitionModalProps> = ({
                             </option>
                         ))}
                     </select>
+                    {vacationAlert && (
+                        <div className="flex items-center gap-2 mt-2 text-red-600 text-xs font-bold animate-pulse">
+                            <Palmtree size={14}/> {vacationAlert}
+                        </div>
+                    )}
                 </div>
             </div>
 

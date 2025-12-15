@@ -94,6 +94,14 @@ export const GlobalLogsModal: React.FC<GlobalLogsModalProps> = ({ cases, users, 
       return filteredLogs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredLogs, currentPage]);
 
+  const getLogInitials = (userName: string, userObj?: UserType) => {
+      if (userObj && userObj.avatarInitials) return userObj.avatarInitials;
+      
+      const parts = userName.trim().split(' ');
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
@@ -190,7 +198,7 @@ export const GlobalLogsModal: React.FC<GlobalLogsModalProps> = ({ cases, users, 
                                             className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
                                             style={{ backgroundColor: userObj?.color || '#94a3b8' }}
                                         >
-                                            {(log.user || '?').substring(0,2).toUpperCase()}
+                                            {getLogInitials(log.user, userObj)}
                                         </div>
                                         <span className="text-sm text-slate-600 font-medium">{log.user}</span>
                                     </div>

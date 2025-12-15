@@ -1,10 +1,12 @@
 
+// ... existing imports
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Save, Clock, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
-import { Case, User as UserType, WhatsAppTemplate } from '../types';
+import { X, Save, Clock, AlertTriangle, CheckCircle, FileText, Loader2, CalendarPlus, RefreshCw, AlertOctagon, Link as LinkIcon, Check } from 'lucide-react';
+import { Case, User as UserType, WhatsAppTemplate, INSSAgency, SystemSettings } from '../types';
 import { VIEW_CONFIG } from '../constants';
-import { getPredictiveInsights, validateCPF, generateDiffLog } from '../utils';
+import { getPredictiveInsights, validateCPF, generateDiffLog, safeDeepCopy, safeStringify } from '../utils';
 import { ConfirmationModal } from './ConfirmationModal';
+import { db } from '../services/database'; // Import DB for subscription
 
 // Sub-components
 import { ClientInfo } from './case-modal/ClientInfo';
@@ -12,24 +14,38 @@ import { CaseTimeline } from './case-modal/CaseTimeline';
 import { CaseFiles } from './case-modal/CaseFiles';
 import { CaseHistory } from './case-modal/CaseHistory';
 
+// ... interface CaseModalProps ...
 interface CaseModalProps {
   data: Case;
   allCases: Case[]; 
   users: UserType[];
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updatedCase: Case, logMessage: string) => void;
+  onSave: (updatedCase: Case, logMessage: string) => Promise<boolean> | void; 
   onSelectCase: (c: Case) => void; 
   onOpenWhatsApp?: (c: Case) => void; 
-  onOpenDocumentGenerator?: (c: Case) => void;
+  onOpenSchedule?: (c: Case) => void; 
+  onOpenDocumentGenerator?: (c: Case) => void; // New prop
   commonDocs?: string[]; 
-  whatsAppTemplates?: WhatsAppTemplate[]; // New prop
+  whatsAppTemplates?: WhatsAppTemplate[]; 
+  agencies?: INSSAgency[]; 
+  systemSettings?: SystemSettings; // NEW PROP
 }
 
-export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isOpen, onClose, onSave, onOpenWhatsApp, onOpenDocumentGenerator, commonDocs, whatsAppTemplates }) => {
-  const [formData, setFormData] = useState<Case>({ ...data, tags: data.tags || [] });
+export const CaseModal: React.FC<CaseModalProps> = ({ 
+    data, allCases, users, isOpen, onClose, onSave, onOpenWhatsApp, onOpenSchedule, onOpenDocumentGenerator,
+    commonDocs, whatsAppTemplates, agencies, systemSettings 
+}) => {
+  // SAFE INITIALIZATION
+  const [formData, setFormData] = useState<Case>({ ...data, tags: data.tags || [], history: data.history || [] });
   const [pendingNote, setPendingNote] = useState('');
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); 
+  const [linkCopied, setLinkCopied] = useState(false);
+  
+  // Concurrency Control State
+  const [remoteConflict, setRemoteConflict] = useState<Case | null>(null);
+  const [latestRemoteData, setLatestRemoteData] = useState<Case | null>(null);
   
   // Feedback System State
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success', message: string } | null>(null);
@@ -42,34 +58,56 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
       return getPredictiveInsights(allCases, data);
   }, [allCases, data]);
 
-  // Reset form ONLY when Modal OPENS or ID CHANGES (Switching cases), NOT on every data prop update (background sync)
+  // --- REAL-TIME WATCHER (The Anti-Conflict Mechanism) ---
+  useEffect(() => {
+      if (!isOpen || !data.id) return;
+
+      // Subscribe to live changes
+      const unsubscribe = db.subscribeToCase(data.id, (remoteCase) => {
+          // Ignore self-updates (simple check: if content excluding timestamp is same as local current state)
+          // We use originalDataRef as the "last known good state"
+          
+          if (remoteCase.lastUpdate > originalDataRef.current.lastUpdate) {
+              
+              // Smart check: Is the data actually different?
+              const cleanRemote = { ...remoteCase, lastUpdate: '', lastCheckedAt: '' };
+              const cleanLocal = { ...originalDataRef.current, lastUpdate: '', lastCheckedAt: '' };
+              
+              // Only trigger if business data changed (safe stringify)
+              if (safeStringify(cleanRemote) !== safeStringify(cleanLocal)) {
+                  console.log("Real conflict detected");
+                  setRemoteConflict(remoteCase);
+                  setLatestRemoteData(remoteCase);
+              }
+          }
+      });
+
+      return () => unsubscribe();
+  }, [isOpen, data.id]);
+
+  // Reset form ONLY when Modal OPENS or ID CHANGES
   useEffect(() => {
     if (isOpen) {
-        // Deep copy to break references
-        const deepCopiedTasks = data.tasks ? JSON.parse(JSON.stringify(data.tasks)) : [];
-        const deepCopiedFiles = data.files ? JSON.parse(JSON.stringify(data.files)) : [];
-        const deepCopiedTags = data.tags ? [...data.tags] : [];
-        const deepCopiedHistory = data.history ? [...data.history] : [];
-        const deepCopiedDocs = data.missingDocs ? [...data.missingDocs] : [];
+        // USE SAFE DEEP COPY HERE
+        const cleanData = safeDeepCopy(data);
         
-        const cleanData = { 
-            ...data, 
-            tasks: deepCopiedTasks, 
-            files: deepCopiedFiles, 
-            tags: deepCopiedTags,
-            missingDocs: deepCopiedDocs,
-            history: deepCopiedHistory
-        };
-        
+        cleanData.tags = cleanData.tags || [];
+        cleanData.history = cleanData.history || [];
+
         setFormData(cleanData);
-        originalDataRef.current = JSON.parse(JSON.stringify(cleanData)); // Set baseline for diff with deep copy
+        originalDataRef.current = safeDeepCopy(cleanData);
+        
         setPendingNote('');
         setFeedback(null);
         setShowExitConfirmation(false);
+        setIsSaving(false);
+        setRemoteConflict(null);
+        setLatestRemoteData(null);
+        setLinkCopied(false);
     }
-  }, [data.id, isOpen]); // CRITICAL: Only reset if ID changes or Modal Opens. Ignore shallow data updates.
+  }, [data.id, isOpen]);
 
-  // Auto-clear feedback after 4 seconds
+  // Auto-clear feedback
   useEffect(() => {
       if (feedback) {
           const timer = setTimeout(() => setFeedback(null), 4000);
@@ -79,13 +117,9 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
 
   if (!isOpen) return null;
 
-  // Optimized Dirty Check using JSON comparison for robustness
   const hasUnsavedChanges = () => {
       if (pendingNote.trim().length > 0) return true;
-      
-      // Compare current form data with original baseline (excluding volatile fields if any)
-      // Since we deep copied originalDataRef on mount, direct JSON comparison works well for identifying any field change
-      return JSON.stringify(formData) !== JSON.stringify(originalDataRef.current);
+      return safeStringify(formData) !== safeStringify(originalDataRef.current);
   };
 
   const handleCloseRequest = () => {
@@ -111,8 +145,39 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
       setFeedback({ message, type });
   };
 
-  const handleSave = () => {
-    // 1. Validation Logic
+  const handleCopyLink = () => {
+      const url = new URL(window.location.origin);
+      url.searchParams.set('cid', data.id);
+      navigator.clipboard.writeText(url.toString());
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const handleResolveConflict = () => {
+      if (latestRemoteData) {
+          if (hasUnsavedChanges()) {
+              if(!window.confirm("Você tem alterações não salvas. Atualizar agora sobrescreverá suas mudanças com a versão mais recente. Deseja continuar?")) {
+                  return;
+              }
+          }
+          // Update local state to match remote
+          const safeRemote = safeDeepCopy(latestRemoteData);
+          safeRemote.tags = safeRemote.tags || [];
+          safeRemote.history = safeRemote.history || [];
+          
+          setFormData(safeRemote);
+          originalDataRef.current = safeRemote;
+          setRemoteConflict(null);
+          showFeedback("Dados sincronizados com sucesso.", "success");
+      }
+  };
+
+  const handleSave = async () => {
+    if (remoteConflict) {
+        showFeedback("Não é possível salvar: conflito de versão detectado. Atualize os dados primeiro.", "error");
+        return;
+    }
+
     if (!formData.clientName || formData.clientName.trim() === '') { 
         showFeedback("O nome do cliente é obrigatório.", 'error');
         return; 
@@ -123,7 +188,6 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
         return;
     }
 
-    // 2. Generate Intelligent Log (Diff)
     let logMessage = generateDiffLog(originalDataRef.current, formData);
     
     if (logMessage === "" && pendingNote.trim()) {
@@ -132,8 +196,6 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
     
     if (pendingNote.trim()) {
         logMessage = logMessage ? `${logMessage} | Nota: ${pendingNote}` : `Nota: ${pendingNote}`;
-        
-        // Also manually append the note to history inside the object, in case updateCase relies on it
         const newHistoryItem = { 
             id: `h-note-save-${Date.now()}`, 
             date: new Date().toISOString(), 
@@ -141,33 +203,39 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
             action: 'Nota Rápida', 
             details: pendingNote 
         };
-        formData.history = [...formData.history, newHistoryItem];
+        formData.history = [...(formData.history || []), newHistoryItem];
     }
 
-    // If still empty (no diff, no note), verify granular changes
     if (!logMessage && !hasUnsavedChanges()) {
         logMessage = "Salvamento manual.";
     }
 
-    // 4. Execute Save
+    setIsSaving(true);
     try {
         const finalData = { ...formData };
+        const success = await onSave(finalData, logMessage);
         
-        onSave(finalData, logMessage);
-        
-        // CRITICAL: Update the baseline reference to the new saved state
-        originalDataRef.current = JSON.parse(JSON.stringify(finalData));
-        
-        showFeedback("Alterações salvas com sucesso!", 'success');
-        setPendingNote('');
-        
-        setTimeout(() => {
-            onClose();
-        }, 500);
+        if (success !== false) { 
+            // CRITICAL FIX: Update reference immediately to match what we saved.
+            originalDataRef.current = safeDeepCopy(finalData);
+            // We spoof the lastUpdate locally to match what server will likely set
+            originalDataRef.current.lastUpdate = new Date().toISOString(); 
+
+            showFeedback("Alterações salvas com sucesso!", 'success');
+            setPendingNote('');
+            
+            setTimeout(() => {
+                onClose();
+            }, 500);
+        } else {
+            showFeedback("Erro ao salvar! Verifique a conexão.", 'error');
+        }
 
     } catch (e) {
         console.error(e);
         showFeedback("Erro interno ao salvar. Tente novamente.", 'error');
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -175,14 +243,16 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
       setFormData(prev => ({ ...prev, ...updates }));
   };
 
-  // FIX: Immediate note addition capturing pending changes
-  const handleAddNoteToState = (note: string) => {
+  const handleAddNoteToState = async (note: string) => {
+      if (remoteConflict) {
+          showFeedback("Atualize os dados antes de adicionar notas.", "error");
+          return;
+      }
       if (!formData.clientName || formData.clientName.trim() === '') { 
         showFeedback("Não é possível salvar notas sem Nome do Cliente.", 'error');
         return; 
       }
 
-      // 1. Create history item
       const newHistoryItem = { 
           id: `h-note-${Date.now()}`, 
           date: new Date().toISOString(), 
@@ -191,37 +261,52 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
           details: note 
       };
       
-      const newHistory = [...formData.history, newHistoryItem];
-      
-      // 2. Check for any pending form changes (THE FIX)
-      // We must log pending edits NOW or they are saved silently.
+      const newHistory = [...(formData.history || []), newHistoryItem];
       const diffLog = generateDiffLog(originalDataRef.current, formData);
-      
-      // 3. Prepare Log Message for App.tsx
-      // If there are field changes, pass them as the log message.
       const appLogMessage = diffLog !== "" ? `Alterações via Nota: ${diffLog}` : "";
-
       const stateToSave = { ...formData, history: newHistory };
 
-      // 4. Update UI
       setFormData(stateToSave);
       
-      // 5. Commit
-      onSave(stateToSave, appLogMessage);
+      const success = await onSave(stateToSave, appLogMessage);
       
-      // 6. Update Baseline
-      originalDataRef.current = JSON.parse(JSON.stringify(stateToSave));
+      if (success !== false) {
+          originalDataRef.current = safeDeepCopy(stateToSave);
+          originalDataRef.current.lastUpdate = new Date().toISOString();
+      } else {
+          showFeedback("Erro ao salvar nota.", 'error');
+      }
   };
 
   const viewConfig = VIEW_CONFIG[formData.view];
 
+  // ... (rest of render method remains the same)
   return (
     <div 
         className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-0 md:p-4 animate-in fade-in zoom-in-95 duration-200"
-        onClick={handleBackdropClick} // Close on click outside
+        onClick={handleBackdropClick} 
     >
       <div className="bg-slate-100 w-full md:max-w-6xl h-[100dvh] md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 relative">
         
+        {/* CONFLICT ALERT BANNER */}
+        {remoteConflict && (
+            <div className="bg-amber-100 border-b border-amber-200 text-amber-900 px-4 py-3 flex items-center justify-between z-[110] animate-in slide-in-from-top-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <AlertOctagon className="text-amber-600 animate-pulse" size={20}/>
+                    <div>
+                        <p className="text-sm font-bold">Atenção: Dados desatualizados!</p>
+                        <p className="text-xs">Outro usuário modificou este processo enquanto você estava com ele aberto.</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={handleResolveConflict}
+                    className="bg-amber-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-amber-700 flex items-center gap-2 shadow-sm transition-all"
+                >
+                    <RefreshCw size={14}/> Atualizar Visualização
+                </button>
+            </div>
+        )}
+
         {/* FEEDBACK POPUP (TOAST) */}
         {feedback && (
             <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 border ${feedback.type === 'error' ? 'bg-red-600 border-red-700 text-white' : 'bg-emerald-600 border-emerald-700 text-white'}`}>
@@ -259,15 +344,34 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
                  </div>
             </div>
             <div className="flex gap-2 items-center">
+                <button 
+                    onClick={handleCopyLink}
+                    className={`p-2 rounded-full transition-colors ${linkCopied ? 'bg-green-100 text-green-600' : 'hover:bg-slate-100 text-slate-400'}`}
+                    title="Copiar Link Compartilhável"
+                >
+                    {linkCopied ? <Check size={18}/> : <LinkIcon size={18}/>}
+                </button>
+                <div className="w-px h-8 bg-slate-200 mx-1"></div>
+                {onOpenSchedule && (
+                    <button 
+                        onClick={() => onOpenSchedule(formData)}
+                        className="hidden sm:flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-100 rounded-lg text-xs font-bold transition-colors"
+                        title="Agendar atendimento ou compromisso"
+                    >
+                        <CalendarPlus size={16}/> Agendar
+                    </button>
+                )}
+                
                 {onOpenDocumentGenerator && (
                     <button 
                         onClick={() => onOpenDocumentGenerator(formData)}
-                        className="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold transition-colors border border-slate-200"
-                        title="Gerar Documento (Procuração, Contrato...)"
+                        className="hidden sm:flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-lg text-xs font-bold transition-colors ml-2"
+                        title="Gerar Documento"
                     >
-                        <FileText size={16}/> Gerar Doc
+                        <FileText size={16}/> Docs
                     </button>
                 )}
+
                 <div className="w-px h-8 bg-slate-200 mx-2"></div>
                 <button onClick={handleCloseRequest} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors" title="Fechar (Esc)">
                     <X size={24} />
@@ -276,7 +380,7 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 kanban-scroll bg-slate-50/50 pb-20 md:pb-6">
+        <div className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-6 kanban-scroll bg-slate-50/50 pb-20 md:pb-6 ${remoteConflict ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
             <ClientInfo 
                 data={formData} 
                 onChange={updateFormData} 
@@ -286,6 +390,8 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
                 data={formData} 
                 onChange={updateFormData} 
                 whatsAppTemplates={whatsAppTemplates} // Pass templates here
+                agencies={agencies} 
+                systemSettings={systemSettings} // PASS SETTINGS TO TIMELINE
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
                 <CaseFiles 
@@ -313,10 +419,16 @@ export const CaseModal: React.FC<CaseModalProps> = ({ data, allCases, users, isO
                         value={pendingNote}
                         onChange={(e) => setPendingNote(e.target.value)}
                         className="bg-transparent border-none text-sm focus:ring-0 w-full md:w-64"
+                        disabled={isSaving || !!remoteConflict}
                     />
                 </div>
-                <button onClick={handleSave} className="px-4 md:px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md shadow-blue-200 text-sm flex items-center gap-2 transition-transform active:scale-95 whitespace-nowrap">
-                    <Save size={18}/> Salvar
+                <button 
+                    onClick={handleSave} 
+                    disabled={isSaving || !!remoteConflict}
+                    className={`px-4 md:px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md shadow-blue-200 text-sm flex items-center gap-2 transition-transform active:scale-95 whitespace-nowrap ${isSaving || !!remoteConflict ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                    {isSaving ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>}
+                    {isSaving ? 'Salvando...' : 'Salvar'}
                 </button>
             </div>
         </div>

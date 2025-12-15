@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { ColumnDefinition, Case, ViewType, User, SmartAction, SystemSettings, SystemTag, StickyNote } from '../types';
+import { ColumnDefinition, Case, ViewType, User, SystemSettings, SystemTag } from '../types';
 import { VIEW_THEMES } from '../constants';
 import { KanbanColumn } from './kanban/KanbanColumn';
 import { KanbanDragOverlay } from './kanban/KanbanDragOverlay';
@@ -17,38 +17,30 @@ interface KanbanBoardProps {
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onCardClick: (c: Case) => void;
-  onWhatsApp: (c: Case) => void;
-  onQuickCheck: (c: Case) => void;
-  onSmartAction: (c: Case, action: SmartAction) => void;
-  onStickyNote: (c: Case, note?: StickyNote) => void;
-  onSchedule?: (c: Case) => void; // NEW
+  onContextMenu?: (e: React.MouseEvent, c: Case) => void; 
   users: User[]; 
   currentUser?: User;
   systemSettings: SystemSettings;
   systemTags: SystemTag[];
 }
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
-  cases, currentView, columns, casesByColumn, recurrencyMap, draggedCaseId, onDrop, onDragStart, onDragEnd, onCardClick, onWhatsApp, onQuickCheck, onSmartAction, onStickyNote, onSchedule, users, currentUser, systemSettings, systemTags
+export const KanbanBoard = React.memo<KanbanBoardProps>(({ 
+  cases, currentView, columns, casesByColumn, recurrencyMap, draggedCaseId, onDrop, onDragStart, onDragEnd, onCardClick, onContextMenu, users, currentUser, systemSettings, systemTags
 }) => {
   const activeTheme = VIEW_THEMES[currentView];
-  const standardColumns = columns.filter(c => !c.id.startsWith('zone_'));
-  const zoneColumns = columns.filter(c => c.id.startsWith('zone_'));
+  
+  // Memoize filters to prevent recalculation on every render
+  const standardColumns = useMemo(() => columns.filter(c => !c.id.startsWith('zone_')), [columns]);
+  const zoneColumns = useMemo(() => columns.filter(c => c.id.startsWith('zone_')), [columns]);
   
   const draggedCase = useMemo(() => cases.find(c => c.id === draggedCaseId), [cases, draggedCaseId]);
 
-  // Logic to determine the "Suggested" next column
   const getSuggestedColumnId = () => {
       if (!draggedCase) return null;
-      
-      // 1. Find current column index
       const currentIndex = standardColumns.findIndex(c => c.id === draggedCase.columnId);
-      
-      // 2. Default: Next column in line
       if (currentIndex !== -1 && currentIndex < standardColumns.length - 1) {
           return standardColumns[currentIndex + 1].id;
       }
-      
       return null;
   };
 
@@ -56,10 +48,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <main className="flex-1 flex overflow-hidden relative">
-        
         <KanbanDragOverlay draggedCase={draggedCase} />
-
-        {/* LEFT AREA: Standard Kanban */}
         <div className="flex-1 overflow-x-auto overflow-y-hidden kanban-scroll p-6 lg:p-10">
             <div className="flex h-full gap-8 min-w-max pb-4">
                 {standardColumns.map((column) => (
@@ -73,12 +62,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         onDragStart={onDragStart}
                         onDragEnd={onDragEnd}
                         onCardClick={onCardClick}
+                        onContextMenu={onContextMenu} 
                         recurrencyMap={recurrencyMap}
-                        onWhatsApp={onWhatsApp}
-                        onQuickCheck={onQuickCheck}
-                        onSmartAction={onSmartAction}
-                        onStickyNote={onStickyNote}
-                        onSchedule={onSchedule}
                         users={users}
                         currentUser={currentUser}
                         isSuggested={suggestedColId === column.id}
@@ -88,8 +73,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 ))}
             </div>
         </div>
-
-        {/* RIGHT AREA: Action Zones */}
         <KanbanActionZones 
             zoneColumns={zoneColumns}
             activeTheme={activeTheme}
@@ -100,15 +83,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             onDragEnd={onDragEnd}
             onCardClick={onCardClick}
             recurrencyMap={recurrencyMap}
-            onWhatsApp={onWhatsApp}
-            onQuickCheck={onQuickCheck}
-            onSmartAction={onSmartAction}
-            onStickyNote={onStickyNote}
-            onSchedule={onSchedule}
             users={users}
             systemSettings={systemSettings}
             systemTags={systemTags}
         />
     </main>
   );
-};
+});

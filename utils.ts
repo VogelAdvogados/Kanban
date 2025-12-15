@@ -1,42 +1,160 @@
 
-import { Case, ViewType, HealthStatus, SystemSettings, SearchIndex, User, INSSAgency } from './types';
-import { DEFAULT_INSS_AGENCIES, JUDICIAL_COURTS } from './constants';
+import { Case, ViewType, HealthStatus, SystemSettings, SearchIndex, User, INSSAgency, UserPermission, Task, WorkflowRule, WorkflowCondition, WorkflowAction } from './types';
+import { DEFAULT_INSS_AGENCIES, JUDICIAL_COURTS, ROLE_PERMISSIONS, BENEFIT_OPTIONS } from './constants';
 
-// ============================================================================
-// HELPER: LOCATION RESOLVER (NEW)
-// ============================================================================
-export const getLocationAddress = (locationName: string | undefined): string => {
-    if (!locationName) return 'Local não definido';
+// --- SAFE JSON UTILS (Prevents Circular Structure Error) ---
+export const safeStringify = (obj: any): string => {
+    const cache = new Set();
+    return JSON.stringify(obj, (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+            if (cache.has(value)) {
+                // Circular reference found, discard key
+                return;
+            }
+            cache.add(value);
+        }
+        return value;
+    });
+};
 
-    // 1. Try Judicial Courts
-    const court = JUDICIAL_COURTS.find(c => c.name === locationName);
-    if (court) return `${court.name} - Endereço: ${court.address}`;
-
-    // 2. Try INSS Agencies
-    const agency = DEFAULT_INSS_AGENCIES.find(a => a.name === locationName);
-    if (agency) return `${agency.name} - Endereço: ${agency.address}`;
-
-    // 3. Fallback to raw text
-    return locationName;
+export const safeDeepCopy = <T>(obj: T): T => {
+    try {
+        if (!obj) return obj;
+        return JSON.parse(safeStringify(obj));
+    } catch (e) {
+        console.error("Safe Deep Copy failed", e);
+        // Fallback: Return original if copy fails (prevents crash, though mutability remains)
+        return obj;
+    }
 };
 
 // ============================================================================
-// ALGORITHM 1: INVERTED INDEX SEARCH ENGINE (Existing)
+// WORKFLOW ENGINE
 // ============================================================================
+
+export const checkWorkflowCondition = (c: Case, cond: WorkflowCondition): boolean => {
+    switch (cond.type) {
+        case 'TAG_CONTAINS':
+            return !!(c.tags && cond.value && c.tags.includes(cond.value));
+        case 'BENEFIT_TYPE':
+            return c.benefitType === cond.value;
+        case 'URGENCY_IS':
+            return c.urgency === cond.value;
+        case 'FIELD_EMPTY':
+            // @ts-ignore
+            return !c[cond.value as keyof Case];
+        case 'FIELD_NOT_EMPTY':
+            // @ts-ignore
+            return !!c[cond.value as keyof Case];
+        default:
+            return false;
+    }
+};
+
+export interface WorkflowResult {
+    updates: Partial<Case>;
+    logs: string[];
+    notifications: string[];
+    blocked?: boolean;
+    blockReason?: string;
+}
+
+export const evaluateWorkflowRules = (
+    c: Case, 
+    rules: WorkflowRule[], 
+    targetColumnId: string
+): WorkflowResult => {
+    
+    let updates: Partial<Case> = {};
+    let logs: string[] = [];
+    let notifications: string[] = [];
+    let blocked = false;
+    let blockReason = '';
+
+    // Filter rules relevant to this trigger
+    const relevantRules = rules.filter(r => r.isActive && r.trigger === 'COLUMN_ENTER' && r.targetColumnId === targetColumnId);
+
+    for (const rule of relevantRules) {
+        // Check ALL conditions (AND logic)
+        const allConditionsMet = rule.conditions.every(cond => checkWorkflowCondition(c, cond));
+        
+        if (allConditionsMet) {
+            logs.push(`Automação "${rule.name}" acionada.`);
+            
+            for (const action of rule.actions) {
+                switch (action.type) {
+                    case 'ADD_TASK':
+                        const newTask: Task = { 
+                            id: `t_auto_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, 
+                            text: action.payload, 
+                            completed: false 
+                        };
+                        // Safe merge with existing tasks in current loop
+                        const existingTasks = updates.tasks || c.tasks || [];
+                        updates.tasks = [...existingTasks, newTask];
+                        break;
+                    
+                    case 'ADD_TAG':
+                        const tag = action.payload;
+                        const existingTags = updates.tags || c.tags || [];
+                        if (!existingTags.includes(tag)) {
+                            updates.tags = [...existingTags, tag];
+                        }
+                        break;
+                    
+                    case 'SET_URGENCY':
+                        updates.urgency = action.payload;
+                        break;
+                    
+                    case 'SEND_NOTIFICATION':
+                        notifications.push(action.payload);
+                        break;
+
+                    case 'BLOCK_MOVE':
+                        blocked = true;
+                        blockReason = action.payload || 'Movimentação bloqueada por regra de automação.';
+                        break;
+                }
+            }
+        }
+    }
+
+    return { updates, logs, notifications, blocked, blockReason };
+};
+
+// ... (rest of existing utils: hasPermission, getClientAvatarColor, etc.) ...
+
+export const hasPermission = (user: User | null, permission: UserPermission): boolean => {
+    if (!user) return false;
+    if (user.role === 'ADMIN') return true;
+    const allowed = ROLE_PERMISSIONS[user.role];
+    if (!allowed) return false;
+    return allowed.includes(permission);
+};
+
+export const getClientAvatarColor = (sex?: 'MALE' | 'FEMALE'): string => {
+    if (sex === 'FEMALE') return 'bg-gradient-to-br from-pink-500 to-rose-600 shadow-pink-200';
+    if (sex === 'MALE') return 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-200';
+    return 'bg-gradient-to-br from-slate-400 to-slate-500';
+};
+
+export const getLocationAddress = (locationName: string | undefined): string => {
+    if (!locationName) return 'Local não definido';
+    const court = JUDICIAL_COURTS.find(c => c.name === locationName);
+    if (court) return `${court.name} - Endereço: ${court.address}`;
+    const agency = DEFAULT_INSS_AGENCIES.find(a => a.name === locationName);
+    if (agency) return `${agency.name} - Endereço: ${agency.address}`;
+    return locationName;
+};
+
 const normalizeToken = (text: string): string => {
-    return text
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^\w\s]/gi, "");
+    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w\s]/gi, "");
 };
 
 export const buildSearchIndex = (cases: Case[]): SearchIndex => {
     const index: SearchIndex = {};
     cases.forEach(c => {
-        const content = [
-            c.clientName, c.cpf, c.internalId, c.benefitNumber, c.protocolNumber, ...(c.tags || [])
-        ].join(' ');
+        const content = [c.clientName, c.cpf, c.internalId, c.benefitNumber, c.protocolNumber, ...(c.tags || [])].join(' ');
         const tokens = normalizeToken(content).split(/\s+/);
         const uniqueTokens = new Set(tokens);
         uniqueTokens.forEach(token => {
@@ -61,9 +179,6 @@ export const searchCasesByIndex = (query: string, index: SearchIndex, allCases: 
     return allCases.filter(c => resultIds.has(c.id));
 };
 
-// ============================================================================
-// ALGORITHM 2: WEIGHTED HEALTH DECAY SCORE (Existing)
-// ============================================================================
 export interface CaseHealthAnalysis {
     status: HealthStatus;
     score: number; 
@@ -133,9 +248,6 @@ export const analyzeCaseHealth = (c: Case, settings: SystemSettings, historicalA
     return { status, score, daysStagnant, reason: reasons.join('. ') || 'Em dia', contactStatus, daysSinceContact };
 };
 
-// ============================================================================
-// ALGORITHM 3: PREDICTIVE DATE ESTIMATION (Existing)
-// ============================================================================
 export const getPredictiveInsights = (cases: Case[], currentCase: Case) => {
     const completedCases = cases.filter(c => 
         c.view === currentCase.view && 
@@ -181,48 +293,28 @@ export const getPredictiveInsights = (cases: Case[], currentCase: Case) => {
     };
 };
 
-// ============================================================================
-// ALGORITHM 4: SMART LOAD BALANCER (NEW)
-// ============================================================================
-/**
- * Suggests the best user to handle a task based on current workload weight.
- * Critical cases weight 3x, High 2x, Normal 1x.
- */
 export const recommendResponsible = (users: User[], allCases: Case[]): string => {
     if (users.length === 0) return '';
-    
-    // Calculate load score per user
     const loadMap: Record<string, number> = {};
     users.forEach(u => loadMap[u.id] = 0);
-
     const urgencyWeights = { 'CRITICAL': 3, 'HIGH': 2, 'NORMAL': 1 };
-
     allCases.forEach(c => {
-        // Only count active cases
         if (c.columnId.includes('arquiva') || c.columnId.includes('concluido')) return;
-        
         if (loadMap[c.responsibleId] !== undefined) {
             loadMap[c.responsibleId] += urgencyWeights[c.urgency];
         }
     });
-
-    // Find user with min load
     let minLoad = Infinity;
     let recommendedId = users[0].id;
-
     Object.entries(loadMap).forEach(([userId, load]) => {
         if (load < minLoad) {
             minLoad = load;
             recommendedId = userId;
         }
     });
-
     return recommendedId;
 };
 
-// ============================================================================
-// ALGORITHM 5: AGENCY INTELLIGENCE (NEW)
-// ============================================================================
 export interface AgencyStats {
     total: number;
     conceded: number;
@@ -231,41 +323,27 @@ export interface AgencyStats {
     avgTime: number;
 }
 
-/**
- * Analyzes historical data for a specific Agency (Location) to determine win rates.
- */
 export const getAgencyStats = (agencyName: string, allCases: Case[]): AgencyStats => {
-    // Normalize agency name for fuzzy match
     const target = normalizeToken(agencyName);
-    
     const relevantCases = allCases.filter(c => 
         c.periciaLocation && 
         normalizeToken(c.periciaLocation).includes(target) &&
         (c.tags?.includes('CONCEDIDO') || c.tags?.includes('INDEFERIDO'))
     );
-
     const total = relevantCases.length;
     if (total === 0) return { total: 0, conceded: 0, denied: 0, winRate: 0, avgTime: 0 };
-
     const conceded = relevantCases.filter(c => c.tags?.includes('CONCEDIDO')).length;
     const denied = total - conceded;
     const winRate = Math.round((conceded / total) * 100);
-
-    // Calculate avg time for decision
     let totalDays = 0;
     relevantCases.forEach(c => {
         const start = new Date(c.createdAt).getTime();
         const end = new Date(c.lastUpdate).getTime();
-        if (!isNaN(start) && !isNaN(end)) {
-            totalDays += (end - start) / (1000 * 60 * 60 * 24);
-        }
+        if (!isNaN(start) && !isNaN(end)) totalDays += (end - start) / (1000 * 60 * 60 * 24);
     });
     const avgTime = Math.round(totalDays / total);
-
     return { total, conceded, denied, winRate, avgTime };
 };
-
-// --- HELPERS (Keep existing) ---
 
 export const extractDataFromText = (text: string): Partial<Case> => {
     const extracted: Partial<Case> = {};
@@ -404,15 +482,100 @@ export const getSuccessProbability = (c: Case): number => {
     return Math.min(95, Math.max(5, prob));
 };
 
+// --- IMPROVED DIFF GENERATOR FOR "RAIO-X" FEATURE ---
 export const generateDiffLog = (original: Case, updated: Case): string => {
     const changes: string[] = [];
-    const trackableFields: (keyof Case)[] = ['clientName', 'cpf', 'phone', 'benefitType', 'protocolNumber', 'benefitNumber', 'govPassword', 'urgency', 'deadlineEnd', 'periciaDate', 'periciaLocation'];
+    
+    // Friendly Names Map
+    const labels: Record<string, string> = {
+        clientName: 'Nome do Cliente',
+        cpf: 'CPF',
+        phone: 'Telefone',
+        benefitType: 'Espécie',
+        protocolNumber: 'Protocolo',
+        benefitNumber: 'NB (Benefício)',
+        govPassword: 'Senha Gov.br',
+        urgency: 'Prioridade',
+        deadlineEnd: 'Prazo Fatal',
+        periciaDate: 'Data Perícia',
+        periciaLocation: 'Local Perícia',
+        sex: 'Sexo',
+        dcbDate: 'DCB (Cessação)',
+        isExtension: 'Pedido Prorrogação'
+    };
+
+    const trackableFields: (keyof Case)[] = Object.keys(labels) as any;
+
+    const formatVal = (key: string, val: any) => {
+        if (val === null || val === undefined || val === '') return 'Vazio';
+        if (typeof val === 'boolean') return val ? 'Sim' : 'Não';
+        if (key.includes('Date') || key === 'deadlineEnd') {
+            const d = parseLocalYMD(val) || new Date(val);
+            if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
+        }
+        if (key === 'benefitType') {
+            const ben = BENEFIT_OPTIONS.find(b => b.code === val);
+            return ben ? `${val} - ${ben.label.split(' - ')[1]}` : val;
+        }
+        if (key === 'urgency') {
+            const map: any = { 'NORMAL': 'Normal', 'HIGH': 'Alta', 'CRITICAL': 'Crítica' };
+            return map[val] || val;
+        }
+        return val;
+    };
+
+    // 1. Scalar Fields
     trackableFields.forEach(field => {
-        if (original[field] !== updated[field]) {
-            if ((!original[field] && !updated[field])) return;
-            changes.push(`${field}: ${original[field]} ➝ ${updated[field]}`);
+        const oldVal = original[field];
+        const newVal = updated[field];
+
+        if (oldVal !== newVal) {
+            // Ignore if both are essentially empty
+            if ((!oldVal && !newVal)) return;
+            
+            // Format values
+            const formattedOld = formatVal(field as string, oldVal);
+            const formattedNew = formatVal(field as string, newVal);
+
+            changes.push(`${labels[field as string]}: ${formattedOld} ➝ ${formattedNew}`);
         }
     });
+
+    // 2. Array Fields: Tags
+    if (safeStringify(original.tags) !== safeStringify(updated.tags)) {
+        const oldTags = original.tags || [];
+        const newTags = updated.tags || [];
+        const added = newTags.filter(t => !oldTags.includes(t));
+        const removed = oldTags.filter(t => !newTags.includes(t));
+        
+        if (added.length > 0) changes.push(`Tags: +${added.join(', +')}`);
+        if (removed.length > 0) changes.push(`Tags: -${removed.join(', -')}`);
+    }
+
+    // 3. Array Fields: Missing Docs
+    if (safeStringify(original.missingDocs) !== safeStringify(updated.missingDocs)) {
+        const oldDocs = original.missingDocs || [];
+        const newDocs = updated.missingDocs || [];
+        const addedDocs = newDocs.filter(d => !oldDocs.includes(d));
+        const solvedDocs = oldDocs.filter(d => !newDocs.includes(d));
+
+        if (addedDocs.length > 0) changes.push(`Pendência Add: ${addedDocs.join(', ')}`);
+        if (solvedDocs.length > 0) changes.push(`Pendência Resolvida: ${solvedDocs.join(', ')}`);
+    }
+
+    // 4. Tasks (Basic completion detection)
+    if (updated.tasks && original.tasks) {
+        updated.tasks.forEach(t => {
+            const oldT = original.tasks?.find(ot => ot.id === t.id);
+            if (oldT && oldT.completed !== t.completed) {
+                changes.push(`Tarefa: "${t.text}" (${t.completed ? 'Concluída' : 'Reaberta'})`);
+            }
+        });
+        // Detect new tasks
+        const newTasks = updated.tasks.filter(t => !original.tasks?.some(ot => ot.id === t.id));
+        if (newTasks.length > 0) changes.push(`Nova Tarefa: ${newTasks.length} adicionada(s)`);
+    }
+    
     if (changes.length === 0) return ""; 
     return changes.join(' | ');
 };
@@ -448,6 +611,15 @@ export const formatDate = (d: string | undefined): string => {
   const date = parseLocalYMD(d) || new Date(d); 
   if (isNaN(date.getTime())) return '';
   return date.toLocaleDateString('pt-BR');
+};
+
+export const formatBytes = (bytes: number, decimals = 0): string => {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
 export const getAutomaticUpdatesForColumn = (columnId: string): Partial<Case> => {
